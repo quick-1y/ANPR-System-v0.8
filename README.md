@@ -111,6 +111,16 @@ python3 -m anpr.stability \
   --requests 50
 ```
 
+### Soak-test (30–60 минут, Этап 6)
+```bash
+python3 -m anpr.stability \
+  --mode soak \
+  --soak-minutes 30 \
+  --soak-interval-s 60 \
+  --soak-requests 30 \
+  --output reports/stability/soak_latest.json
+```
+
 ## 🧹 Завершение работы
 - Закрытие окна или выход через системное меню останавливает все фоновые `ChannelWorker`, дожидается завершения их задач и при необходимости принудительно завершает общий процессный пул инференса. Это предотвращает зависание фоновых процессов Python и рост потребления ОЗУ после закрытия приложения.
 
@@ -302,6 +312,16 @@ ANPR-System-v0.8/
 ├── app.py                    # Точка входа (GUI)
 ├── requirements.txt          # Зависимости Python
 ├── settings.json             # Конфигурация приложения (автоматически создаётся; каналы, ROI, фильтры)
+├── .github/                  # CI/CD пайплайны
+│   └── workflows/
+│       ├── stability-gate.yml        # Обязательный stability gate перед релизом
+│       └── stability-soak-trends.yml # Длительный soak-test и обновление трендов
+├── scripts/                  # Служебные скрипты автоматизации
+│   └── update_stability_trend.py     # Обновление history + markdown отчёта по трендам
+├── reports/                  # Персистентные отчёты стабильности
+│   └── stability/
+│       ├── soak_history.jsonl        # История прогонов soak-test
+│       └── soak_trends.md            # Человекочитаемый отчёт по latency/error-rate
 │
 ├── docs/                     # Документация по миграции и архитектурным этапам
 │   └── migration/
@@ -387,7 +407,7 @@ ANPR-System-v0.8/
     ├── stability/            # Набор проверок стабильности (Этап 6)
     │   ├── __init__.py
     │   ├── __main__.py       # CLI-запуск Stability Suite
-    │   └── runner.py         # Smoke/load/degradation probes + отчёт
+    │   └── runner.py         # Smoke/load/degradation + soak probes и отчёты
     │
     ├── infrastructure/       # Инфраструктурный слой
     │   ├── __init__.py
