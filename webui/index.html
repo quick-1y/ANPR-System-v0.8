@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ANPR Web</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>ANPR Web Platform</h1>
+      <form id="add-channel-form">
+        <input id="channel-name" placeholder="Имя канала" required />
+        <input id="channel-source" placeholder="RTSP/индекс камеры" required />
+        <button type="submit">Добавить канал</button>
+      </form>
+    </header>
+
+    <main>
+      <section>
+        <h2>Мониторинг каналов</h2>
+        <div id="channels" class="grid"></div>
+      </section>
+      <section>
+        <h2>События распознавания</h2>
+        <div id="events" class="events"></div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
