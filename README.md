@@ -8,6 +8,15 @@
 
 Десктопное приложение для автоматического распознавания автомобильных номеров с поддержкой многоканального видео, локальной базой данных и интеллектуальной обработкой в реальном времени.
 
+> ℹ️ Проект находится в фазе миграции на web-архитектуру.
+> - Артефакты Этапа 0 (аудит и проектирование): `docs/migration/stage0/`
+> - Артефакты Этапа 1 (каркас ANPR Core Service): `docs/migration/stage1/`
+> - Артефакты Этапа 2 (Video Gateway): `docs/migration/stage2/`
+> - Артефакты Этапа 3 (Event & Telemetry): `docs/migration/stage3/`
+> - Артефакты Этапа 4 (Web UI MVP): `docs/migration/stage4/`
+> - Артефакты Этапа 5 (Data Layer): `docs/migration/stage5/`
+> - Артефакты Этапа 6 (Stabilization): `docs/migration/stage6/`
+
 ## 🚀 Основные возможности
 
 - **Многоканальный мониторинг** — одновременная работа с несколькими видеопотоками (RTSP/файлы/веб-камера)
@@ -47,7 +56,7 @@
 ```bash
 # Клонирование репозитория
 git clone <repository-url>
-cd ANPR-System-v0.7
+cd ANPR-System-v0.8
 
 # Установка зависимостей (выберите вариант под ваше железо)
 
@@ -63,6 +72,43 @@ pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https
 ### Графический интерфейс
 ```bash
 python app.py
+```
+
+### Headless ANPR Core Service (Этап 1)
+```bash
+python -m anpr.core --host 127.0.0.1 --port 8080
+```
+
+### Video Gateway Service (Этап 2)
+```bash
+python -m anpr.video_gateway --host 127.0.0.1 --port 8090
+```
+
+### Event & Telemetry Service (Этап 3)
+```bash
+python -m anpr.event_telemetry --host 127.0.0.1 --port 8100
+```
+
+### Web UI Service (Этап 4)
+```bash
+python -m anpr.web_ui --host 127.0.0.1 --port 8110 \
+  --core-base-url http://127.0.0.1:8080/api/v1 \
+  --video-base-url http://127.0.0.1:8090/api/v1 \
+  --events-base-url http://127.0.0.1:8100/api/v1
+```
+
+### Data Layer Service (Этап 5)
+```bash
+python3 -m anpr.data_layer --host 127.0.0.1 --port 8120
+```
+
+### Stability Suite (Этап 6)
+```bash
+python3 -m anpr.stability \
+  --core-url http://127.0.0.1:8080/api/v1 \
+  --video-url http://127.0.0.1:8090/api/v1 \
+  --events-url http://127.0.0.1:8100/api/v1 \
+  --requests 50
 ```
 
 ## 🧹 Завершение работы
@@ -251,11 +297,31 @@ flowchart TD
 ## 📁 Структура проекта
 
 ```
-ANPR-System-v0.7/
+ANPR-System-v0.8/
 ├── .gitignore                # Шаблон игнорирования временных файлов и артефактов
 ├── app.py                    # Точка входа (GUI)
 ├── requirements.txt          # Зависимости Python
 ├── settings.json             # Конфигурация приложения (автоматически создаётся; каналы, ROI, фильтры)
+│
+├── docs/                     # Документация по миграции и архитектурным этапам
+│   └── migration/
+│       ├── stage0/
+│       │   ├── README.md             # Цели, артефакты и критерии завершения Этапа 0
+│       │   ├── audit_checklist.md    # Чек-лист аудита текущей desktop-реализации
+│       │   ├── target_architecture.md # Черновик целевой web-архитектуры
+│       │   └── backlog.md            # Приоритизированный backlog миграции
+│       ├── stage1/
+│       │   └── README.md             # Каркас headless ANPR Core Service и API v1
+│       ├── stage2/
+│       │   └── README.md             # Video Gateway (control-plane), профили и API видеосессий
+│       ├── stage3/
+│       │   └── README.md             # Event & Telemetry Service: события, метрики, алерты
+│       ├── stage4/
+│       │   └── README.md             # Web UI MVP: dashboard, события, конфигуратор
+│       ├── stage5/
+│       │   └── README.md             # Data Layer: retention, rotation, export
+│       └── stage6/
+│           └── README.md             # Stabilization: smoke/load/degradation и runbook
 │
 ├── config/                   # Форматы номеров стран
 │   └── countries/
@@ -281,6 +347,47 @@ ANPR-System-v0.7/
 └── anpr/                     # Основной пакет приложения
     ├── __init__.py
     ├── config.py             # Константы путей к моделям и пороги
+    │
+    ├── core/                 # Headless слой ANPR Core Service (Этап 1)
+    │   ├── __init__.py
+    │   ├── __main__.py       # CLI-запуск API сервиса
+    │   ├── models.py         # Доменные модели каналов и статистики
+    │   ├── service.py        # Сервис управления каналами без UI-зависимостей
+    │   └── http_api.py       # HTTP API v1 (health/metrics/channels/roi/filters/lists)
+    │
+    ├── video_gateway/        # Headless Video Gateway Service (Этап 2)
+    │   ├── __init__.py
+    │   ├── __main__.py       # CLI-запуск Video Gateway API
+    │   ├── models.py         # Модели видеопрофилей/потоков/сессий
+    │   ├── service.py        # Управление RTSP-потоками и профилями качества
+    │   └── http_api.py       # API video/health/metrics/streams/sessions
+    │
+    ├── event_telemetry/      # Headless Event & Telemetry Service (Этап 3)
+    │   ├── __init__.py
+    │   ├── __main__.py       # CLI-запуск Event & Telemetry API
+    │   ├── models.py         # Модели событий ANPR и телеметрии каналов
+    │   ├── service.py        # Подписка/поллинг событий, алерты, health/metrics
+    │   └── http_api.py       # API событий, телеметрии, алертов и проверки здоровья
+    │
+    ├── web_ui/               # Headless Web UI Service (Этап 4)
+    │   ├── __init__.py
+    │   ├── __main__.py       # CLI-запуск Web UI сервиса
+    │   ├── server.py         # Раздача UI и runtime-конфига endpoint-ов
+    │   └── static/           # HTML/CSS/JS web-панели оператора
+    │       ├── index.html
+    │       ├── styles.css
+    │       └── app.js
+    │
+    ├── data_layer/           # Headless Data Layer Service (Этап 5)
+    │   ├── __init__.py
+    │   ├── __main__.py       # CLI-запуск Data Layer API
+    │   ├── service.py        # Retention/rotation/export и health данных
+    │   └── http_api.py       # API управления жизненным циклом данных
+    │
+    ├── stability/            # Набор проверок стабильности (Этап 6)
+    │   ├── __init__.py
+    │   ├── __main__.py       # CLI-запуск Stability Suite
+    │   └── runner.py         # Smoke/load/degradation probes + отчёт
     │
     ├── infrastructure/       # Инфраструктурный слой
     │   ├── __init__.py
