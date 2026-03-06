@@ -1,4 +1,12 @@
-# Worker (план)
+# Retention Worker Service
 
-Здесь будет выделенный процессный слой для channel workers и очередей задач.
-Текущий MVP использует встроенный runtime в `packages/anpr_core/channel_runtime.py`.
+Отдельный сервис для production-режима, выполняющий циклы retention/rotation вне API-процесса.
+
+## Запуск
+```bash
+uvicorn apps.worker.main:app --host 0.0.0.0 --port 8092
+```
+
+## Endpoints
+- `GET /worker/health`
+- `POST /worker/retention/run`

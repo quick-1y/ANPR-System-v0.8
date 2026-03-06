@@ -1,6 +1,7 @@
 # Nginx (план)
 
-Здесь будут конфиги reverse-proxy для маршрутизации:
+Reverse-proxy маршрутизация:
 - `/` -> `apps/web` + `apps/api`
 - `/hls` -> `apps/video_gateway`
-- WebSocket/SSE проксирование для live событий
+- `/worker/*` -> `apps/worker` (ограничить доступ в prod)
+- SSE/WebSocket проксирование для live событий

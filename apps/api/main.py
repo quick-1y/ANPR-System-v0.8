@@ -58,7 +58,6 @@ events_db = EventDatabase(settings.get_db_path())
 lists_db = ListDatabase(settings.get_db_path())
 event_bus = EventBus()
 MAIN_LOOP: asyncio.AbstractEventLoop | None = None
-RETENTION_TASK: asyncio.Task[Any] | None = None
 
 
 def _build_lifecycle() -> DataLifecycleService:
@@ -75,11 +74,16 @@ def _publish_event_sync(event: Dict[str, Any]) -> None:
         MAIN_LOOP.call_soon_threadsafe(asyncio.create_task, event_bus.publish(event))
 
 
-processor = ChannelProcessor(event_callback=_publish_event_sync, db_path=settings.get_db_path(), plate_settings=settings.get_plate_settings())
+processor = ChannelProcessor(
+    event_callback=_publish_event_sync,
+    db_path=settings.get_db_path(),
+    plate_settings=settings.get_plate_settings(),
+    storage_settings=settings.get_storage_settings(),
+)
 lifecycle = _build_lifecycle()
 
 
-app = FastAPI(title="ANPR Core API", version="0.8-stage6")
+app = FastAPI(title="ANPR Core API", version="0.8-stage7")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -89,32 +93,20 @@ app.add_middleware(
 app.mount("/web", StaticFiles(directory="apps/web", html=True), name="web")
 
 
-async def retention_loop() -> None:
-    while True:
-        policy = lifecycle.policy
-        if policy.auto_cleanup_enabled:
-            lifecycle.run_retention_cycle()
-        await asyncio.sleep(max(60, policy.cleanup_interval_minutes * 60))
-
-
 @app.on_event("startup")
 async def bootstrap_channels() -> None:
-    global MAIN_LOOP, RETENTION_TASK
+    global MAIN_LOOP
     MAIN_LOOP = asyncio.get_running_loop()
     for channel in settings.get_channels():
         processor.ensure_channel(channel)
         if channel.get("enabled", True):
             processor.start(int(channel["id"]))
-    RETENTION_TASK = asyncio.create_task(retention_loop())
 
 
 @app.on_event("shutdown")
 def shutdown_channels() -> None:
-    global RETENTION_TASK
     for channel in settings.get_channels():
         processor.stop(int(channel["id"]))
-    if RETENTION_TASK:
-        RETENTION_TASK.cancel()
 
 
 @app.get("/")

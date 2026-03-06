@@ -81,12 +81,12 @@ anpr-web/
 - ✅ Этап 4. Web UI MVP — выполнен.
 - ✅ Этап 5. Video Gateway (HLS + quality profiles + WebRTC discovery-контракт) — выполнен в базовой версии.
 - ✅ Этап 6. Data Layer и эксплуатация (retention/rotation/export) — выполнен.
-- ⏳ Этап 7. Удаление desktop UI — запланирован после feature parity.
+- ✅ Этап 7. Удаление desktop UI и web-only переход — выполнен.
 
 ## Следующие этапы (после текущего)
-1. Этап 7: удалить desktop UI, desktop-зависимости и legacy сборку после проверки критических сценариев web MVP.
-2. Перенести retention scheduler в отдельный worker (для production deployment).
-3. Подготовить миграции на PostgreSQL и dual-write режим без простоя.
+1. Усилить dual-write: retry/backoff/metrics/алерты рассинхронизации.
+2. Провести rolling migration SQLite -> PostgreSQL на окружениях.
+3. Оптимизировать экспорт архивов: batch/chunk и фоновые задачи.
 
 
 ## Этап 6. Реализация data layer (выполнено)
@@ -117,3 +117,20 @@ anpr-web/
 ### Риски и ограничения
 - Экспорт ZIP с media может быть тяжёлым на очень больших объёмах (нужен batch/chunk экспорт в следующей итерации).
 - Для многосервисного продакшн-режима требуется вынести retention-задачи в отдельный scheduler/worker.
+
+
+## Этап 7. Удаление desktop UI и web-only переход (выполнено)
+
+### Что изменено
+- Удалены desktop-артефакты: `app.py`, `anpr/ui/*`, `anpr/workers/*`.
+- Удалена зависимость `PyQt5` из `requirements.txt`.
+- Обновлены точки запуска: API, Video Gateway и отдельный retention worker.
+- Retention scheduler вынесен из API в `apps/worker/main.py` (production-friendly separation).
+- Подготовлен PostgreSQL-переход:
+  - dual-write настройки в storage (`dual_write_enabled`, `postgres_dsn`);
+  - dual-write sink `packages/anpr_core/event_sink.py`;
+  - схема `infra/postgres/schema.sql`;
+  - скрипт one-shot миграции `scripts/sync_sqlite_to_postgres.py`.
+
+### Риски
+- Для полноценного production dual-write нужна стратегия повторов/очередей и мониторинг рассинхронизации.

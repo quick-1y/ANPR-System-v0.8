@@ -72,6 +72,8 @@ def storage_defaults() -> Dict[str, Any]:
         "media_retention_days": 14,
         "max_screenshots_mb": 4096,
         "export_dir": "data/exports",
+        "dual_write_enabled": False,
+        "postgres_dsn": "",
     }
 
 

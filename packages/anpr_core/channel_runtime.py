@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from anpr.infrastructure.logging_manager import get_logger
-from anpr.infrastructure.storage import EventDatabase
+from packages.anpr_core.event_sink import DualEventSink
 
 logger = get_logger(__name__)
 
@@ -33,11 +33,16 @@ class ChannelContext:
 
 
 class ChannelProcessor:
-    def __init__(self, event_callback, db_path: str, plate_settings: Dict[str, Any] | None = None) -> None:
+    def __init__(self, event_callback, db_path: str, plate_settings: Dict[str, Any] | None = None, storage_settings: Dict[str, Any] | None = None) -> None:
         self._event_callback = event_callback
         self._contexts: Dict[int, ChannelContext] = {}
         self._lock = threading.RLock()
-        self._db = EventDatabase(db_path)
+        storage = storage_settings or {}
+        self._sink = DualEventSink(
+            sqlite_db_path=db_path,
+            dual_write_enabled=bool(storage.get("dual_write_enabled", False)),
+            postgres_dsn=str(storage.get("postgres_dsn", "")),
+        )
         self._plate_settings = plate_settings or {}
 
     def list_states(self) -> Dict[int, ChannelMetrics]:
@@ -140,7 +145,7 @@ class ChannelProcessor:
                         "source": str(channel.get("source", "")),
                         "direction": detection.get("direction", "UNKNOWN"),
                     }
-                    self._db.insert_event(**{k: event[k] for k in ("channel", "plate", "country", "confidence", "source", "timestamp", "direction")})
+                    self._sink.insert_event(**{k: event[k] for k in ("channel", "plate", "country", "confidence", "source", "timestamp", "direction")})
                     self._event_callback(event)
                     metrics.last_event_at = event["timestamp"]
                 frames += 1
