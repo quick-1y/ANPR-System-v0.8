@@ -78,12 +78,12 @@ git clone https://github.com/quick-1y/ANPR-System-v0.8_web.git
 cd ANPR-System-v0.8_web
 ```
 
-### Для CPU:
+#### Для CPU:
 ```bash
 pip install -r requirements.txt --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
 ```
 
-### Для CUDA 2.8.0:
+#### Для CUDA 2.8.0:
 ```bash
 pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
 ```
