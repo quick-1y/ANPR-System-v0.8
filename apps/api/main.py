@@ -202,6 +202,28 @@ def channel_health(channel_id: int) -> Dict[str, Any]:
         "metrics": metrics.__dict__ if metrics else {"state": "unknown"},
     }
 
+@app.get("/api/telemetry/channels")
+def channels_telemetry() -> List[Dict[str, Any]]:
+    channels = {int(item["id"]): item for item in settings.get_channels()}
+    metrics = processor.list_states()
+    items: List[Dict[str, Any]] = []
+    for channel_id, metric in metrics.items():
+        items.append(
+            {
+                "channel_id": channel_id,
+                "name": channels.get(channel_id, {}).get("name", f"channel-{channel_id}"),
+                "state": metric.state,
+                "fps": metric.fps,
+                "latency_ms": metric.latency_ms,
+                "reconnect_count": metric.reconnect_count,
+                "timeout_count": metric.timeout_count,
+                "error_count": metric.error_count,
+                "last_event_at": metric.last_event_at,
+                "last_error": metric.last_error,
+            }
+        )
+    return items
+
 
 @app.post("/api/channels")
 def create_channel(payload: ChannelPayload) -> Dict[str, Any]:

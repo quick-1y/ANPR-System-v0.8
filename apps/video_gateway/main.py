@@ -175,6 +175,16 @@ def shutdown() -> None:
     service.stop_all()
 
 
+@app.get("/")
+def root() -> Dict[str, str]:
+    return {
+        "service": "video-gateway",
+        "health": "/video/health",
+        "channels": "/video/channels",
+        "webrtc_config": "/video/webrtc/config",
+    }
+
+
 @app.get("/video/health")
 def health() -> Dict[str, int | str | bool]:
     return {

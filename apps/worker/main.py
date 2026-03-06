@@ -69,3 +69,18 @@ def health() -> Dict[str, Any]:
 def run_retention() -> Dict[str, Any]:
     result = lifecycle.run_retention_cycle()
     return {"status": "ok", **result}
+
+
+@app.get("/")
+def root() -> Dict[str, Any]:
+    return {
+        "service": "retention-worker",
+        "status": "ok",
+        "health": "/worker/health",
+        "run_retention": "/worker/retention/run",
+    }
+
+
+@app.get("/favicon.ico")
+def favicon() -> Dict[str, str]:
+    return {"status": "no-favicon"}

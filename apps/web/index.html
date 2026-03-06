@@ -75,6 +75,8 @@
 
 <script>
 const players = new Map();
+const tileObserver = new IntersectionObserver(onTileVisibility, {threshold:[0,0.25,0.6]});
+const tileVisibility = new Map();
 
 function api(path, abs=false){
   const base = document.getElementById('apiBase').value.trim();
@@ -87,6 +89,22 @@ async function jfetch(url, method='GET', body=null){
   const r = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body: body ? JSON.stringify(body): null});
   if(!r.ok) throw new Error(await r.text());
   return await r.json();
+}
+
+
+
+function onTileVisibility(entries){
+  for(const entry of entries){
+    const id = Number(entry.target.dataset.channelId || 0);
+    if(!id) continue;
+    const ratio = entry.intersectionRatio || 0;
+    const profile = ratio >= 0.6 ? "medium" : "low";
+    const prev = tileVisibility.get(id);
+    tileVisibility.set(id, profile);
+    if(prev && prev !== profile){
+      setProfile(id, profile).catch(()=>{});
+    }
+  }
 }
 
 function stateBadge(state){
@@ -138,6 +156,7 @@ async function refreshChannels(){
     const m = ch.metrics||{};
     const div = document.createElement('div');
     div.className='tile';
+    div.dataset.channelId=String(ch.id);
     div.innerHTML = `
       <div class='title'><span>#${ch.id} ${ch.name}</span>${stateBadge(m.state)}</div>
       <div class='muted'>FPS: ${(m.fps||0).toFixed(1)} | latency: ${(m.latency_ms||0).toFixed(1)} ms</div>
@@ -151,6 +170,7 @@ async function refreshChannels(){
       </div>
     `;
     tiles.appendChild(div);
+    tileObserver.observe(div);
     await ensureVideo(ch);
   }
 

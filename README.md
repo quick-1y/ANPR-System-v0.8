@@ -114,6 +114,7 @@ ANPR-System-v0.8/
 - `PUT /api/channels/{id}/ocr` (валидируемый контракт OCR)
 - `PUT /api/channels/{id}/filter` (валидируемый контракт фильтрации)
 - `GET /api/channels/{id}/health`
+- `GET /api/telemetry/channels`
 
 ### События
 - `GET /api/events`
@@ -144,7 +145,7 @@ ANPR-System-v0.8/
 - `POST /video/channels/{id}/profile`
 - `GET /video/webrtc/config`
 - `PUT /video/webrtc/config`
-- `POST /video/webrtc/{id}/offer` (WHEP adapter path)
+- `POST /video/webrtc/{id}/offer` (WHEP adapter path, body: SDP `application/sdp`)
 - `GET /video/webrtc/{id}`
 
 ---
@@ -231,3 +232,13 @@ curl -i http://127.0.0.1:8091/video/health
 ```
 
 5. Для запуска WebRTC path нужен внешний медиасервер (MediaMTX/go2rtc) и доступный `ffmpeg`.
+
+6. PowerShell важно: команды запуска сервисов нужно выполнять в **отдельных терминалах** (или через `Start-Process`), иначе первая команда блокирует выполнение следующих.
+Пример:
+```powershell
+Start-Process python -ArgumentList "-m uvicorn apps.api.main:app --host 0.0.0.0 --port 8080"
+Start-Process python -ArgumentList "-m uvicorn apps.video_gateway.main:app --host 0.0.0.0 --port 8091"
+Start-Process python -ArgumentList "-m uvicorn apps.worker.main:app --host 0.0.0.0 --port 8092"
+```
+
+7. `GET /` на порту 8092 (worker) теперь возвращает сервисную информацию; рабочий health endpoint: `GET /worker/health`.
