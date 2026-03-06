@@ -2,203 +2,221 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <title>ANPR Web MVP</title>
+  <title>ANPR Operator Dashboard</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 16px; background:#111; color:#eee; }
-    .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    .card { background:#1f1f1f; border:1px solid #333; border-radius:8px; padding:12px; }
-    input, button, select { margin: 4px; padding: 6px; }
-    table { width:100%; border-collapse: collapse; font-size: 13px; }
-    td, th { border-bottom: 1px solid #333; padding: 6px; text-align:left; }
+    body{margin:0;font-family:Arial;background:#0f1115;color:#e8eaed}
+    .top{display:flex;gap:12px;align-items:center;padding:10px 14px;background:#1a1f29;position:sticky;top:0}
+    .wrap{padding:12px}
+    .grid{display:grid;grid-template-columns:2fr 1fr;gap:12px}
+    .card{background:#1a1f29;border:1px solid #2d3542;border-radius:8px;padding:10px}
+    .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+    .tile{border:1px solid #2d3542;border-radius:8px;padding:8px;background:#11161f}
+    .title{display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:6px}
+    .state{padding:2px 6px;border-radius:12px;font-size:11px}
+    .run{background:#1f6f43}.stop{background:#6b2a2a}.err{background:#7a4b00}
+    video{width:100%;background:#000;border-radius:6px;min-height:140px}
+    button,input,select,textarea{background:#0f1115;color:#e8eaed;border:1px solid #2d3542;border-radius:6px;padding:6px}
+    .row{display:flex;gap:6px;flex-wrap:wrap}
+    .events{max-height:70vh;overflow:auto}
+    .event{padding:8px;border-bottom:1px solid #2d3542;cursor:pointer}
+    .event:hover{background:#202838}
+    .muted{opacity:.75;font-size:12px}
+    pre{white-space:pre-wrap}
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
 <body>
-  <h1>ANPR Web-first MVP</h1>
-  <p>Video Gateway: HLS + WebRTC contract (этап 5)</p>
-  <div class="grid">
-    <section class="card">
-      <h3>Каналы</h3>
-      <div>
-        <input id="channel-name" placeholder="Имя канала" />
-        <input id="channel-source" placeholder="RTSP/файл/индекс камеры" />
-        <button onclick="addChannel()">Добавить</button>
+<div class="top">
+  <strong>ANPR Operator Dashboard</strong>
+  <span class="muted" id="health"></span>
+  <input id="apiBase" value="" placeholder="API base, напр. http://localhost:8080" style="min-width:260px"/>
+  <input id="videoBase" value="http://localhost:8091" placeholder="Video Gateway" style="min-width:220px"/>
+  <button onclick="refreshAll()">Обновить</button>
+</div>
+
+<div class="wrap grid">
+  <section class="card">
+    <h3>Каналы и live tiles</h3>
+    <div class="row">
+      <input id="newName" placeholder="Имя канала" />
+      <input id="newSource" placeholder="RTSP/файл/индекс" />
+      <button onclick="createChannel()">Добавить канал</button>
+    </div>
+    <div class="tiles" id="tiles"></div>
+  </section>
+
+  <section class="card">
+    <h3>Live события</h3>
+    <div class="events" id="events"></div>
+    <h4>Детали события</h4>
+    <pre id="eventDetail" class="muted">Выберите событие в ленте</pre>
+  </section>
+
+  <section class="card">
+    <h3>Controller management</h3>
+    <div class="row">
+      <input id="ctrlName" placeholder="Название"/>
+      <input id="ctrlAddress" placeholder="Адрес"/>
+      <button onclick="createController()">Создать</button>
+    </div>
+    <pre id="controllers" class="muted"></pre>
+  </section>
+
+  <section class="card">
+    <h3>Data layer</h3>
+    <div class="row">
+      <button onclick="loadPolicy()">Policy</button>
+      <button onclick="runRetention()">Run retention</button>
+      <button onclick="window.open(api('/api/data/export/events.csv', true),'_blank')">Export CSV</button>
+    </div>
+    <pre id="policy" class="muted"></pre>
+  </section>
+</div>
+
+<script>
+const players = new Map();
+
+function api(path, abs=false){
+  const base = document.getElementById('apiBase').value.trim();
+  if (abs) return `${base}${path}`;
+  return `${base}${path}`;
+}
+function vapi(path){ return `${document.getElementById('videoBase').value.trim()}${path}`; }
+
+async function jfetch(url, method='GET', body=null){
+  const r = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body: body ? JSON.stringify(body): null});
+  if(!r.ok) throw new Error(await r.text());
+  return await r.json();
+}
+
+function stateBadge(state){
+  if(state==='running') return `<span class='state run'>running</span>`;
+  if(state==='error') return `<span class='state err'>error</span>`;
+  return `<span class='state stop'>${state||'stopped'}</span>`;
+}
+
+function attachHls(videoEl, url){
+  if(videoEl.dataset.url===url) return;
+  videoEl.dataset.url=url;
+  if(players.get(videoEl.id)){ try{players.get(videoEl.id).destroy();}catch(e){} }
+  if(window.Hls && Hls.isSupported()){
+    const hls = new Hls({lowLatencyMode:true});
+    hls.loadSource(url);
+    hls.attachMedia(videoEl);
+    players.set(videoEl.id,hls);
+  } else {
+    videoEl.src=url;
+  }
+}
+
+async function ensureVideo(channel){
+  try{
+    await jfetch(vapi(`/video/channels/${channel.id}/start`), 'POST', {source: channel.source, profile:'low'});
+  }catch(e){/* already started or gateway unavailable */}
+}
+
+async function setProfile(id, profile){
+  await jfetch(vapi(`/video/channels/${id}/profile`), 'POST', {profile});
+  await refreshChannels();
+}
+
+async function startChannel(id){ await jfetch(api(`/api/channels/${id}/start`),'POST'); refreshChannels(); }
+async function stopChannel(id){ await jfetch(api(`/api/channels/${id}/stop`),'POST'); refreshChannels(); }
+
+async function refreshHealth(){
+  try{
+    const health = await jfetch(api('/api/health'));
+    document.getElementById('health').textContent = `API: ${health.status}, channels=${health.channels_total}, running=${health.channels_running}`;
+  }catch(e){document.getElementById('health').textContent = `API error: ${e}`;}
+}
+
+async function refreshChannels(){
+  const channels = await jfetch(api('/api/channels'));
+  const tiles = document.getElementById('tiles');
+  tiles.innerHTML='';
+  for(const ch of channels){
+    const m = ch.metrics||{};
+    const div = document.createElement('div');
+    div.className='tile';
+    div.innerHTML = `
+      <div class='title'><span>#${ch.id} ${ch.name}</span>${stateBadge(m.state)}</div>
+      <div class='muted'>FPS: ${(m.fps||0).toFixed(1)} | latency: ${(m.latency_ms||0).toFixed(1)} ms</div>
+      <video id='v-${ch.id}' autoplay muted controls playsinline></video>
+      <div class='row' style='margin-top:6px'>
+        <button onclick='startChannel(${ch.id})'>Start</button>
+        <button onclick='stopChannel(${ch.id})'>Stop</button>
+        <button onclick='setProfile(${ch.id},"low")'>low</button>
+        <button onclick='setProfile(${ch.id},"medium")'>medium</button>
+        <button onclick='setProfile(${ch.id},"high")'>high</button>
       </div>
-      <table id="channels-table"></table>
-    </section>
+    `;
+    tiles.appendChild(div);
+    await ensureVideo(ch);
+  }
 
-    <section class="card">
-      <h3>Video Gateway</h3>
-      <input id="vg-base" placeholder="http://localhost:8091" value="http://localhost:8091" />
-      <input id="vg-channel-id" placeholder="ID канала" />
-      <input id="vg-source" placeholder="RTSP source" />
-      <select id="vg-profile"><option>low</option><option selected>medium</option><option>high</option></select>
-      <button onclick="startVideo()">Start Video</button>
-      <button onclick="switchVideoProfile()">Switch Profile</button>
-      <table id="video-table"></table>
-    </section>
-
-    <section class="card">
-      <h3>Data Layer (Этап 6)</h3>
-      <button onclick="loadDataPolicy()">Показать policy</button>
-      <button onclick="runRetentionNow()">Запустить retention</button>
-      <button onclick="downloadEventsCsv()">Экспорт CSV</button>
-      <button onclick="downloadEventsBundle()">Экспорт ZIP+media</button>
-      <pre id="data-policy" style="white-space:pre-wrap;"></pre>
-    </section>
-
-    <section class="card">
-      <h3>Live ANPR события</h3>
-      <table id="events-table"></table>
-    </section>
-
-    <section class="card">
-      <h3>ROI (JSON)</h3>
-      <input id="roi-channel-id" placeholder="ID канала" />
-      <textarea id="roi-json" rows="4" style="width:100%;">{"unit":"percent","points":[{"x":10,"y":10},{"x":90,"y":10},{"x":90,"y":90},{"x":10,"y":90}]}</textarea>
-      <button onclick="saveRoi()">Сохранить ROI</button>
-    </section>
-
-    <section class="card">
-      <h3>Списки</h3>
-      <input id="list-name" placeholder="Название списка" />
-      <select id="list-type"><option value="white">white</option><option value="black">black</option></select>
-      <button onclick="createList()">Создать список</button>
-      <table id="lists-table"></table>
-    </section>
-  </div>
-
-  <script>
-    async function api(path, method='GET', body=null) {
-      const res = await fetch(path, {method, headers:{'Content-Type':'application/json'}, body: body ? JSON.stringify(body) : null});
-      return res.json();
+  try{
+    const vchannels = await jfetch(vapi('/video/channels'));
+    for(const key of Object.keys(vchannels)){
+      const item = vchannels[key];
+      const el = document.getElementById(`v-${item.channel_id}`);
+      if(!el) continue;
+      attachHls(el, `${document.getElementById('videoBase').value}${item.hls_url}`);
     }
+  }catch(e){}
+}
 
+async function createChannel(){
+  await jfetch(api('/api/channels'),'POST',{name:document.getElementById('newName').value,source:document.getElementById('newSource').value});
+  refreshChannels();
+}
 
+async function createController(){
+  const body={name:document.getElementById('ctrlName').value,type:'DTWONDER2CH',address:document.getElementById('ctrlAddress').value,password:'0',relays:[{mode:'pulse',timer_seconds:1,hotkey:''},{mode:'pulse',timer_seconds:1,hotkey:''}]};
+  await jfetch(api('/api/controllers'),'POST',body);
+  loadControllers();
+}
 
-    async function vg(path, method='GET', body=null) {
-      const base = document.getElementById('vg-base').value.replace(/\/$/, '');
-      const res = await fetch(base + path, {method, headers:{'Content-Type':'application/json'}, body: body ? JSON.stringify(body) : null});
-      return res.json();
-    }
+async function loadControllers(){
+  const data = await jfetch(api('/api/controllers'));
+  document.getElementById('controllers').textContent = JSON.stringify(data,null,2);
+}
 
-    async function refreshVideo(){
-      try {
-        const channels = await vg('/video/channels');
-        const rows = ['<tr><th>Channel</th><th>Profile</th><th>HLS</th><th>WebRTC</th></tr>'];
-        Object.values(channels).forEach(ch => {
-          rows.push(`<tr><td>${ch.channel_id}</td><td>${ch.profile}</td><td><a href="${document.getElementById('vg-base').value}${ch.hls_url}" target="_blank">playlist</a></td><td>${ch.webrtc_url}</td></tr>`);
-        });
-        document.getElementById('video-table').innerHTML = rows.join('');
-      } catch (e) {
-        document.getElementById('video-table').innerHTML = '<tr><td>Video Gateway недоступен</td></tr>';
-      }
-    }
+async function loadPolicy(){
+  const p = await jfetch(api('/api/data/policy'));
+  document.getElementById('policy').textContent = JSON.stringify(p,null,2);
+}
 
-    async function startVideo(){
-      const id = document.getElementById('vg-channel-id').value;
-      await vg(`/video/channels/${id}/start`, 'POST', {
-        source: document.getElementById('vg-source').value,
-        profile: document.getElementById('vg-profile').value
-      });
-      refreshVideo();
-    }
+async function runRetention(){
+  const p = await jfetch(api('/api/data/retention/run'),'POST');
+  document.getElementById('policy').textContent = JSON.stringify(p,null,2);
+}
 
-    async function switchVideoProfile(){
-      const id = document.getElementById('vg-channel-id').value;
-      await vg(`/video/channels/${id}/profile`, 'POST', { profile: document.getElementById('vg-profile').value });
-      refreshVideo();
-    }
+function setupEvents(){
+  const feed = document.getElementById('events');
+  const detail = document.getElementById('eventDetail');
+  const es = new EventSource(api('/api/events/stream'));
+  es.onmessage = (msg)=>{
+    const ev = JSON.parse(msg.data);
+    const div = document.createElement('div');
+    div.className='event';
+    div.innerHTML = `<strong>${ev.plate}</strong> <span class='muted'>${ev.channel}</span><br><span class='muted'>${new Date(ev.timestamp).toLocaleString()} conf=${(ev.confidence||0).toFixed(2)}</span>`;
+    div.onclick = ()=>{ detail.textContent = JSON.stringify(ev,null,2); };
+    feed.prepend(div);
+  };
+}
 
+async function refreshAll(){
+  await refreshHealth();
+  await refreshChannels();
+  await loadControllers();
+  await loadPolicy();
+}
 
-
-    async function loadDataPolicy(){
-      const policy = await api('/api/data/policy');
-      document.getElementById('data-policy').textContent = JSON.stringify(policy, null, 2);
-    }
-
-    async function runRetentionNow(){
-      const result = await api('/api/data/retention/run', 'POST');
-      document.getElementById('data-policy').textContent = JSON.stringify(result, null, 2);
-    }
-
-    function downloadEventsCsv(){
-      window.open('/api/data/export/events.csv', '_blank');
-    }
-
-    async function downloadEventsBundle(){
-      const response = await fetch('/api/data/export/bundle', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({include_media:true})
-      });
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'events_bundle.zip';
-      a.click();
-      window.URL.revokeObjectURL(url);
-    }
-
-    async function refreshChannels() {
-      const channels = await api('/api/channels');
-      const rows = ['<tr><th>ID</th><th>Имя</th><th>State</th><th>FPS</th><th>Actions</th></tr>'];
-      channels.forEach(ch => {
-        const m = ch.metrics || {};
-        rows.push(`<tr><td>${ch.id}</td><td>${ch.name}</td><td>${m.state || 'stopped'}</td><td>${(m.fps||0).toFixed(1)}</td>
-          <td><button onclick="startChannel(${ch.id})">Start</button><button onclick="stopChannel(${ch.id})">Stop</button></td></tr>`);
-      });
-      document.getElementById('channels-table').innerHTML = rows.join('');
-    }
-
-    async function refreshLists() {
-      const lists = await api('/api/lists');
-      document.getElementById('lists-table').innerHTML = '<tr><th>ID</th><th>Название</th><th>Тип</th></tr>' + lists.map(l=>`<tr><td>${l.id}</td><td>${l.name}</td><td>${l.type}</td></tr>`).join('');
-    }
-
-    async function startChannel(id){ await api(`/api/channels/${id}/start`, 'POST'); refreshChannels(); }
-    async function stopChannel(id){ await api(`/api/channels/${id}/stop`, 'POST'); refreshChannels(); }
-
-    async function addChannel(){
-      await api('/api/channels', 'POST', {
-        name: document.getElementById('channel-name').value,
-        source: document.getElementById('channel-source').value,
-      });
-      refreshChannels();
-    }
-
-    async function saveRoi(){
-      const id = document.getElementById('roi-channel-id').value;
-      const region = JSON.parse(document.getElementById('roi-json').value);
-      await api(`/api/channels/${id}`, 'PUT', {region, roi_enabled:true});
-      refreshChannels();
-    }
-
-    async function createList(){
-      await api('/api/lists', 'POST', {
-        name: document.getElementById('list-name').value,
-        type: document.getElementById('list-type').value
-      });
-      refreshLists();
-    }
-
-    function setupEvents(){
-      const es = new EventSource('/api/events/stream');
-      es.onmessage = (m)=>{
-        const e = JSON.parse(m.data);
-        const table = document.getElementById('events-table');
-        const row = `<tr><td>${new Date(e.timestamp).toLocaleTimeString()}</td><td>${e.channel}</td><td>${e.plate}</td><td>${(e.confidence||0).toFixed(2)}</td></tr>`;
-        table.innerHTML = row + table.innerHTML;
-      };
-    }
-
-    refreshChannels();
-    refreshLists();
-    setupEvents();
-    refreshVideo();
-    loadDataPolicy();
-    setInterval(refreshChannels, 5000);
-    setInterval(refreshVideo, 5000);
-  </script>
+document.getElementById('apiBase').value = window.location.origin;
+refreshAll();
+setupEvents();
+setInterval(refreshHealth,5000);
+setInterval(refreshChannels,8000);
+</script>
 </body>
 </html>
