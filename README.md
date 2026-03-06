@@ -18,6 +18,7 @@
 - Добавлен web MVP интерфейс оператора `apps/web/index.html` (каналы, статусы, события, ROI, списки).
 - Добавлен независимый runtime каналов `packages/anpr_core/channel_runtime.py` с отдельным lifecycle на канал.
 - Добавлен сервис `apps/video_gateway/main.py` для server-side видео: HLS live-preview, профили качества `low/medium/high`, переключение профиля на лету, и WebRTC discovery-контракт для внешнего SFU/медиасервера.
+- Добавлен эксплуатационный data layer: retention/rotation/export через `apps/api/data_lifecycle.py` и API `/api/data/*` (политики хранения, ручной запуск очистки, экспорт CSV/ZIP).
 
 ### Запуск web MVP
 ```bash
@@ -32,7 +33,8 @@ ANPR-System-v0.8/
 ├── app.py                      # legacy desktop entrypoint (до удаления на финальном этапе)
 ├── apps/
 │   ├── api/
-│   │   └── main.py             # web API + SSE
+│   │   ├── main.py             # web API + SSE + data lifecycle endpoints
+│   │   └── data_lifecycle.py   # retention/rotation/export сервис
 │   ├── video_gateway/
 │   │   └── main.py             # HLS gateway + quality profiles + WebRTC discovery
 │   └── web/
@@ -453,10 +455,10 @@ MIT License
 - ✅ Этап 3: event pipeline + telemetry
 - ✅ Этап 4: web UI MVP
 - ✅ Этап 5: Video Gateway (HLS + profiles + WebRTC discovery)
-- ⏳ Этап 6: data layer эксплуатация (retention/rotation/export)
+- ✅ Этап 6: data layer эксплуатация (retention/rotation/export)
 - ⏳ Этап 7: удаление desktop UI после feature parity
 
 ### Следующие этапы
-1. Реализовать retention/rotation/export и миграции хранения.
-2. Подготовить переход на PostgreSQL (dual-write/rolling migration).
-3. Удалить desktop UI и связанные зависимости после валидации web-сценариев.
+1. Удалить desktop UI и связанные зависимости после валидации web-сценариев.
+2. Вынести retention scheduler в отдельный worker/service для production.
+3. Подготовить переход на PostgreSQL (dual-write/rolling migration).

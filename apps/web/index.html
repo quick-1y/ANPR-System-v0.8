@@ -38,6 +38,15 @@
     </section>
 
     <section class="card">
+      <h3>Data Layer (Этап 6)</h3>
+      <button onclick="loadDataPolicy()">Показать policy</button>
+      <button onclick="runRetentionNow()">Запустить retention</button>
+      <button onclick="downloadEventsCsv()">Экспорт CSV</button>
+      <button onclick="downloadEventsBundle()">Экспорт ZIP+media</button>
+      <pre id="data-policy" style="white-space:pre-wrap;"></pre>
+    </section>
+
+    <section class="card">
       <h3>Live ANPR события</h3>
       <table id="events-table"></table>
     </section>
@@ -100,6 +109,37 @@
       refreshVideo();
     }
 
+
+
+    async function loadDataPolicy(){
+      const policy = await api('/api/data/policy');
+      document.getElementById('data-policy').textContent = JSON.stringify(policy, null, 2);
+    }
+
+    async function runRetentionNow(){
+      const result = await api('/api/data/retention/run', 'POST');
+      document.getElementById('data-policy').textContent = JSON.stringify(result, null, 2);
+    }
+
+    function downloadEventsCsv(){
+      window.open('/api/data/export/events.csv', '_blank');
+    }
+
+    async function downloadEventsBundle(){
+      const response = await fetch('/api/data/export/bundle', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({include_media:true})
+      });
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'events_bundle.zip';
+      a.click();
+      window.URL.revokeObjectURL(url);
+    }
+
     async function refreshChannels() {
       const channels = await api('/api/channels');
       const rows = ['<tr><th>ID</th><th>Имя</th><th>State</th><th>FPS</th><th>Actions</th></tr>'];
@@ -156,6 +196,7 @@
     refreshLists();
     setupEvents();
     refreshVideo();
+    loadDataPolicy();
     setInterval(refreshChannels, 5000);
     setInterval(refreshVideo, 5000);
   </script>

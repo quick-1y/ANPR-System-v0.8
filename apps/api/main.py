@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from anpr.infrastructure.list_database import ListDatabase
 from anpr.infrastructure.settings_manager import SettingsManager
 from anpr.infrastructure.storage import EventDatabase
+from apps.api.data_lifecycle import DataLifecycleService, RetentionPolicy
 from packages.anpr_core.channel_runtime import ChannelProcessor
 from packages.anpr_core.event_bus import EventBus
 
@@ -36,11 +37,37 @@ class EntryPayload(BaseModel):
     comment: str = ""
 
 
+class RetentionPolicyPayload(BaseModel):
+    auto_cleanup_enabled: bool = True
+    cleanup_interval_minutes: int = 30
+    events_retention_days: int = 30
+    media_retention_days: int = 14
+    max_screenshots_mb: int = 4096
+    export_dir: str = "data/exports"
+
+
+class ExportBundlePayload(BaseModel):
+    start: Optional[str] = None
+    end: Optional[str] = None
+    channel: Optional[str] = None
+    include_media: bool = True
+
+
 settings = SettingsManager()
 events_db = EventDatabase(settings.get_db_path())
 lists_db = ListDatabase(settings.get_db_path())
 event_bus = EventBus()
 MAIN_LOOP: asyncio.AbstractEventLoop | None = None
+RETENTION_TASK: asyncio.Task[Any] | None = None
+
+
+def _build_lifecycle() -> DataLifecycleService:
+    policy = RetentionPolicy.from_storage(settings.get_storage_settings())
+    return DataLifecycleService(
+        db_path=settings.get_db_path(),
+        screenshots_dir=settings.get_screenshot_dir(),
+        policy=policy,
+    )
 
 
 def _publish_event_sync(event: Dict[str, Any]) -> None:
@@ -49,9 +76,10 @@ def _publish_event_sync(event: Dict[str, Any]) -> None:
 
 
 processor = ChannelProcessor(event_callback=_publish_event_sync, db_path=settings.get_db_path(), plate_settings=settings.get_plate_settings())
+lifecycle = _build_lifecycle()
 
 
-app = FastAPI(title="ANPR Core API", version="0.8-web-mvp")
+app = FastAPI(title="ANPR Core API", version="0.8-stage6")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -61,20 +89,32 @@ app.add_middleware(
 app.mount("/web", StaticFiles(directory="apps/web", html=True), name="web")
 
 
+async def retention_loop() -> None:
+    while True:
+        policy = lifecycle.policy
+        if policy.auto_cleanup_enabled:
+            lifecycle.run_retention_cycle()
+        await asyncio.sleep(max(60, policy.cleanup_interval_minutes * 60))
+
+
 @app.on_event("startup")
 async def bootstrap_channels() -> None:
-    global MAIN_LOOP
+    global MAIN_LOOP, RETENTION_TASK
     MAIN_LOOP = asyncio.get_running_loop()
     for channel in settings.get_channels():
         processor.ensure_channel(channel)
         if channel.get("enabled", True):
             processor.start(int(channel["id"]))
+    RETENTION_TASK = asyncio.create_task(retention_loop())
 
 
 @app.on_event("shutdown")
 def shutdown_channels() -> None:
+    global RETENTION_TASK
     for channel in settings.get_channels():
         processor.stop(int(channel["id"]))
+    if RETENTION_TASK:
+        RETENTION_TASK.cancel()
 
 
 @app.get("/")
@@ -201,3 +241,39 @@ def add_entry(list_id: int, payload: EntryPayload) -> Dict[str, Any]:
     if not entry_id:
         raise HTTPException(status_code=409, detail="Номер уже существует или пуст")
     return {"id": entry_id}
+
+
+@app.get("/api/data/policy")
+def get_data_policy() -> Dict[str, Any]:
+    return lifecycle.policy.to_storage()
+
+
+@app.put("/api/data/policy")
+def update_data_policy(payload: RetentionPolicyPayload) -> Dict[str, Any]:
+    policy = RetentionPolicy(**payload.model_dump())
+    lifecycle.update_policy(policy)
+    settings.save_storage_settings(policy.to_storage())
+    return {"status": "updated", "policy": policy.to_storage()}
+
+
+@app.post("/api/data/retention/run")
+def run_retention() -> Dict[str, Any]:
+    result = lifecycle.run_retention_cycle()
+    return {"status": "ok", **result}
+
+
+@app.get("/api/data/export/events.csv")
+def export_events_csv(start: Optional[str] = None, end: Optional[str] = None, channel: Optional[str] = None) -> FileResponse:
+    path = lifecycle.export_events_csv(start=start, end=end, channel=channel)
+    return FileResponse(path=path, filename=Path(path).name, media_type="text/csv")
+
+
+@app.post("/api/data/export/bundle")
+def export_events_bundle(payload: ExportBundlePayload) -> FileResponse:
+    path = lifecycle.export_events_bundle(
+        start=payload.start,
+        end=payload.end,
+        channel=payload.channel,
+        include_media=payload.include_media,
+    )
+    return FileResponse(path=path, filename=Path(path).name, media_type="application/zip")

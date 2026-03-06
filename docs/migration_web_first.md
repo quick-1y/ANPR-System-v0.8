@@ -80,10 +80,40 @@ anpr-web/
 - ✅ Этап 3. Event & Telemetry (SSE + health + channel metrics) — выполнен.
 - ✅ Этап 4. Web UI MVP — выполнен.
 - ✅ Этап 5. Video Gateway (HLS + quality profiles + WebRTC discovery-контракт) — выполнен в базовой версии.
-- ⏳ Этап 6. Data Layer и эксплуатация — запланирован.
+- ✅ Этап 6. Data Layer и эксплуатация (retention/rotation/export) — выполнен.
 - ⏳ Этап 7. Удаление desktop UI — запланирован после feature parity.
 
 ## Следующие этапы (после текущего)
-1. Этап 6: добавить retention/rotation/export событий и медиаархива, вынести политики хранения в конфиг.
-2. Этап 6: подготовить миграции на PostgreSQL и dual-write режим без простоя.
-3. Этап 7: удалить desktop UI, desktop-зависимости и legacy сборку после проверки критических сценариев web MVP.
+1. Этап 7: удалить desktop UI, desktop-зависимости и legacy сборку после проверки критических сценариев web MVP.
+2. Перенести retention scheduler в отдельный worker (для production deployment).
+3. Подготовить миграции на PostgreSQL и dual-write режим без простоя.
+
+
+## Этап 6. Реализация data layer (выполнено)
+
+### Что найдено
+- В проекте отсутствовали эксплуатационные механизмы очистки и экспорта событий/медиа.
+- Хранение событий уже централизовано в SQLite `events`, а скриншоты хранятся на диске.
+
+### Что изменено
+- Добавлен сервис `apps/api/data_lifecycle.py`:
+  - retention по событиям БД (`events_retention_days`);
+  - retention по медиафайлам (`media_retention_days`);
+  - rotation медиа по лимиту размера (`max_screenshots_mb`);
+  - экспорт в CSV и ZIP bundle (CSV + media).
+- В `apps/api/main.py` добавлены endpoints:
+  - `GET/PUT /api/data/policy`;
+  - `POST /api/data/retention/run`;
+  - `GET /api/data/export/events.csv`;
+  - `POST /api/data/export/bundle`.
+- Добавлен фоновый retention loop на startup API с интервалом `cleanup_interval_minutes`.
+- Расширены storage defaults в `settings_schema.py` и добавлены `get_storage_settings/save_storage_settings` в `settings_manager.py`.
+- В web UI добавлен блок Data Layer (ручной запуск retention и экспорт).
+
+### Какие файлы добавлены/изменены
+- Создан: `apps/api/data_lifecycle.py`.
+- Изменены: `apps/api/main.py`, `apps/web/index.html`, `anpr/infrastructure/settings_schema.py`, `anpr/infrastructure/settings_manager.py`.
+
+### Риски и ограничения
+- Экспорт ZIP с media может быть тяжёлым на очень больших объёмах (нужен batch/chunk экспорт в следующей итерации).
+- Для многосервисного продакшн-режима требуется вынести retention-задачи в отдельный scheduler/worker.
