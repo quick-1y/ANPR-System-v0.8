@@ -150,12 +150,25 @@ ANPR-System-v0.8/
 
 ---
 
+### Web UI live QoS
+- Ручное переключение профиля сохраняется: кнопки `low/medium/high` в карточке канала.
+- Автоматический QoS включается чекбоксом `Auto QoS` в верхней панели.
+- Эвристика первой версии:
+  - плитка не видна в viewport -> `low`;
+  - плитка видима (>=60%) -> `medium`;
+  - активная плитка (hover курсором) -> `high`.
+- После ручного переключения авто-режим не переопределяет профиль 120 секунд (операторский lock).
+- HLS остаётся основным fallback-путём просмотра, WebRTC — отдельный adapter path.
+
+---
+
 ## Конфигурация хранения
 
 `settings.json -> storage`:
 
 - `db_dir`, `database_file`
 - `screenshots_dir`
+- `logs_dir`
 - `auto_cleanup_enabled`
 - `cleanup_interval_minutes`
 - `events_retention_days`
@@ -182,6 +195,35 @@ python scripts/sync_sqlite_to_postgres.py --sqlite data/db/anpr.db --postgres-ds
 3. Включить dual-write:
 - `PUT /api/storage/dual-write`
 - payload: `{ "dual_write_enabled": true, "postgres_dsn": "..." }`
+
+---
+
+## WebRTC adapter quick-start
+
+1. Запустите внешний медиасервер (например MediaMTX/go2rtc) с включённым WHEP path.
+2. Настройте gateway через API:
+```bash
+curl -X PUT http://127.0.0.1:8091/video/webrtc/config \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": true,
+    "provider": "mediamtx",
+    "signaling_base_url": "http://127.0.0.1:8889",
+    "whep_path_template": "/whep/channel_{channel_id}",
+    "play_url_template": "http://127.0.0.1:8889/whep/channel_{channel_id}"
+  }'
+```
+3. Проверьте конфигурацию:
+```bash
+curl -s http://127.0.0.1:8091/video/webrtc/config
+```
+4. Для теста WHEP offer отправляйте raw SDP:
+```bash
+curl -X POST "http://127.0.0.1:8091/video/webrtc/1/offer" \
+  -H "Content-Type: application/sdp" \
+  --data-binary @offer.sdp
+```
+5. При недоступном WebRTC продолжайте просмотр через HLS (`/hls/.../index.m3u8`).
 
 ---
 

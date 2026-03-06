@@ -31,6 +31,7 @@
   <span class="muted" id="health"></span>
   <input id="apiBase" value="" placeholder="API base, напр. http://localhost:8080" style="min-width:260px"/>
   <input id="videoBase" value="http://localhost:8091" placeholder="Video Gateway" style="min-width:220px"/>
+  <label class="muted"><input id="autoQos" type="checkbox" checked onchange="refreshChannels()"/> Auto QoS</label>
   <button onclick="refreshAll()">Обновить</button>
 </div>
 
@@ -77,6 +78,10 @@
 const players = new Map();
 const tileObserver = new IntersectionObserver(onTileVisibility, {threshold:[0,0.25,0.6]});
 const tileVisibility = new Map();
+const tileActivity = new Map();
+const tileRatios = new Map();
+const profileLocks = new Map();
+const lastAutoSwitch = new Map();
 
 function api(path, abs=false){
   const base = document.getElementById('apiBase').value.trim();
@@ -98,12 +103,10 @@ function onTileVisibility(entries){
     const id = Number(entry.target.dataset.channelId || 0);
     if(!id) continue;
     const ratio = entry.intersectionRatio || 0;
-    const profile = ratio >= 0.6 ? "medium" : "low";
-    const prev = tileVisibility.get(id);
-    tileVisibility.set(id, profile);
-    if(prev && prev !== profile){
-      setProfile(id, profile).catch(()=>{});
-    }
+    tileRatios.set(id, ratio);
+    const isActive = tileActivity.get(id) === true;
+    const profile = isActive ? 'high' : (ratio >= 0.6 ? 'medium' : 'low');
+    maybeAutoSwitch(id, profile);
   }
 }
 
@@ -133,9 +136,27 @@ async function ensureVideo(channel){
   }catch(e){/* already started or gateway unavailable */}
 }
 
-async function setProfile(id, profile){
+async function setProfile(id, profile, options={}){
+  const source = options.source || 'manual';
+  const refresh = options.refresh ?? (source === 'manual');
+  if(source === 'manual'){
+    profileLocks.set(id, Date.now() + 120000);
+  }
   await jfetch(vapi(`/video/channels/${id}/profile`), 'POST', {profile});
-  await refreshChannels();
+  if(refresh) await refreshChannels();
+}
+
+function maybeAutoSwitch(id, profile){
+  if(!document.getElementById('autoQos')?.checked) return;
+  const lockUntil = profileLocks.get(id) || 0;
+  if(Date.now() < lockUntil) return;
+  const lastAt = lastAutoSwitch.get(id) || 0;
+  if(Date.now() - lastAt < 4000) return;
+  const prev = tileVisibility.get(id);
+  if(prev === profile) return;
+  tileVisibility.set(id, profile);
+  lastAutoSwitch.set(id, Date.now());
+  setProfile(id, profile, {source:'auto', refresh:false}).catch(()=>{});
 }
 
 async function startChannel(id){ await jfetch(api(`/api/channels/${id}/start`),'POST'); refreshChannels(); }
@@ -171,6 +192,13 @@ async function refreshChannels(){
     `;
     tiles.appendChild(div);
     tileObserver.observe(div);
+    div.addEventListener('mouseenter', ()=>{ tileActivity.set(ch.id, true); maybeAutoSwitch(ch.id, 'high'); });
+    div.addEventListener('mouseleave', ()=>{
+      tileActivity.set(ch.id, false);
+      const ratio = tileRatios.get(ch.id) || 0;
+      const fallbackProfile = ratio >= 0.6 ? 'medium' : 'low';
+      maybeAutoSwitch(ch.id, fallbackProfile);
+    });
     await ensureVideo(ch);
   }
 
