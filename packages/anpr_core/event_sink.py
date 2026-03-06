@@ -15,10 +15,15 @@ class DualEventSink:
         self._sqlite = EventDatabase(sqlite_db_path)
         self._sqlite_compat_write_enabled = bool(dual_write_enabled)
         self._postgres_dsn = str(postgres_dsn or "").strip()
-        self._postgres = PostgresEventDatabase(self._postgres_dsn) if self._postgres_dsn else None
+        self._postgres = None
+        if self._postgres_dsn:
+            try:
+                self._postgres = PostgresEventDatabase(self._postgres_dsn)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("PostgreSQL backend недоступен, fallback на SQLite compatibility mode: %s", exc)
 
         if not self._postgres:
-            logger.warning("postgres_dsn не задан: используется SQLite compatibility mode (не рекомендуется для production)")
+            logger.warning("postgres_dsn не задан/недоступен: используется SQLite compatibility mode (не рекомендуется для production)")
 
     def insert_event(
         self,

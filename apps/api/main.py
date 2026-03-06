@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from anpr.infrastructure.controller_service import ControllerService
 from anpr.infrastructure.list_database import ListDatabase
+from anpr.infrastructure.logging_manager import get_logger
 from anpr.infrastructure.settings_manager import SettingsManager
 from anpr.infrastructure.storage import EventDatabase, PostgresEventDatabase
 from apps.api.data_lifecycle import DataLifecycleService, RetentionPolicy
@@ -21,6 +22,7 @@ from packages.anpr_core.event_bus import EventBus
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WEB_DIR = PROJECT_ROOT / "apps" / "web"
+logger = get_logger(__name__)
 
 
 class ChannelPayload(BaseModel):
@@ -96,7 +98,10 @@ def _create_events_db() -> EventDatabase | PostgresEventDatabase:
     storage = settings.get_storage_settings()
     postgres_dsn = str(storage.get("postgres_dsn", "")).strip()
     if postgres_dsn:
-        return PostgresEventDatabase(postgres_dsn)
+        try:
+            return PostgresEventDatabase(postgres_dsn)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("PostgreSQL недоступен, fallback на SQLite events DB: %s", exc)
     return EventDatabase(settings.get_db_path())
 
 

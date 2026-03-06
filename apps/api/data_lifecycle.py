@@ -11,7 +11,10 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from anpr.infrastructure.logging_manager import get_logger
 from anpr.infrastructure.storage import PostgresEventDatabase
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -51,7 +54,12 @@ class DataLifecycleService:
         self.screenshots_dir = Path(screenshots_dir)
         self.policy = policy
         self.postgres_dsn = str(postgres_dsn or "").strip()
-        self.pg_events = PostgresEventDatabase(self.postgres_dsn) if self.postgres_dsn else None
+        self.pg_events = None
+        if self.postgres_dsn:
+            try:
+                self.pg_events = PostgresEventDatabase(self.postgres_dsn)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("PostgreSQL lifecycle backend недоступен, fallback на SQLite: %s", exc)
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
         Path(self.policy.export_dir).mkdir(parents=True, exist_ok=True)
 
