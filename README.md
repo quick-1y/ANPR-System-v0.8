@@ -48,6 +48,17 @@ python -m uvicorn apps.api.main:app --host 0.0.0.0 --port 8080
 python -m uvicorn apps.video_gateway.main:app --host 0.0.0.0 --port 8091
 python -m uvicorn apps.worker.main:app --host 0.0.0.0 --port 8092
 ```
+5. При недоступном WebRTC продолжайте просмотр через HLS (`/hls/.../index.m3u8`).
+
+---
+
+## Ограничения и следующие шаги
+
+- WebRTC реализован как адаптер-прокси (WHEP offer proxy) и требует внешнего медиасервера (например MediaMTX/go2rtc).
+- Для production dual-write нужны retry/backoff, метрики и алерты рассинхронизации.
+- Rolling migration SQLite -> PostgreSQL выполняется по окружениям с контролем консистентности.
+
+---
 
 - Web UI / API: `http://localhost:8080`
 - Video Gateway health: `http://localhost:8091/video/health`
