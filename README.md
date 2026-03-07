@@ -32,26 +32,6 @@ Web-first система автоматического распознавани
 
 Схема на уровне компонентов:
 
-```text
-Web UI
-  │
-  ▼
-API Service (FastAPI)
-  │
-  ├── Channel lifecycle / ROI / lists / events
-  ├── SSE stream
-  ├── Data lifecycle
-  │
-  ├── ANPR Core
-  │     ├── Detection
-  │     ├── OCR
-  │     ├── Postprocessing
-  │     └── Channel runtime
-  │
-  └── Built-in Preview
-        └── MJPEG stream `/api/channels/{id}/preview.mjpg`
-```
-
 ```mermaid
 flowchart TD
     A[Видеопоток] --> B{Детектор движения в ROI}
