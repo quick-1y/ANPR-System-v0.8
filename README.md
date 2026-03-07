@@ -75,38 +75,38 @@ Web-first система автоматического распознавани
 
 ```mermaid
 flowchart TD
-    USER[Оператор / Браузер] --> UI[Web UI<br/>apps/web/index.html]
+    USER["Оператор / Браузер"] --> UI["Web UI<br/>apps/web/index.html"]
 
-    subgraph API[API service / FastAPI<br/>apps/api/main.py]
-        HTTP[REST API]
-        SSE[SSE stream]
-        PREVIEW[Preview endpoints<br/>snapshot.jpg / preview.mjpg]
-        PROC[ChannelProcessor]
-        BUS[EventBus]
-        SETTINGS[SettingsManager]
-        EVENTS_DB[EventDatabase / PostgresEventDatabase]
-        LISTS_DB[ListDatabase]
-        CTRL[ControllerService]
-        LIFE[DataLifecycleService]
+    subgraph API["API service / FastAPI<br/>apps/api/main.py"]
+        HTTP["REST API"]
+        SSE["SSE stream"]
+        PREVIEW["Preview endpoints<br/>snapshot and preview"]
+        PROC["ChannelProcessor"]
+        BUS["EventBus"]
+        SETTINGS["SettingsManager"]
+        EVENTS_DB["EventDatabase / PostgresEventDatabase"]
+        LISTS_DB["ListDatabase"]
+        CTRL["ControllerService"]
+        LIFE["DataLifecycleService"]
     end
 
-    subgraph CORE[ANPR Core runtime]
-        SRC[RTSP / HTTP / file / camera]
-        CH[Channel thread]
-        YOLO[YOLODetector]
-        PIPE[ANPRPipeline]
-        SINK[DualEventSink]
+    subgraph CORE["ANPR Core runtime"]
+        SRC["RTSP / HTTP / file / camera"]
+        CH["Channel thread"]
+        YOLO["YOLODetector"]
+        PIPE["ANPRPipeline"]
+        SINK["DualEventSink"]
     end
 
-    subgraph WORKER[Retention worker<br/>apps/worker/main.py]
-        SCH[RetentionScheduler]
-        WLIFE[DataLifecycleService]
+    subgraph WORKER["Retention worker<br/>apps/worker/main.py"]
+        SCH["RetentionScheduler"]
+        WLIFE["DataLifecycleService"]
     end
 
-    subgraph STORAGE[Storage]
-        SQLITE[(SQLite)]
-        PG[(PostgreSQL)]
-        MEDIA[(Screenshots / crops / exports)]
+    subgraph STORAGE["Storage"]
+        SQLITE[("SQLite")]
+        PG[("PostgreSQL")]
+        MEDIA[("Screenshots / crops / exports")]
     end
 
     UI --> HTTP
@@ -151,22 +151,22 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A[Источник видео<br/>RTSP / HTTP / файл / камера] --> B[ChannelProcessor.ensure_channel]
-    B --> C[ChannelProcessor.start]
-    C --> D[Отдельный поток channel-{id}]
-    D --> E[cv2.VideoCapture(source)]
-    E --> F[cap.read -> frame]
+    A["Источник видео<br/>RTSP / HTTP / файл / камера"] --> B["ChannelProcessor.ensure_channel"]
+    B --> C["ChannelProcessor.start"]
+    C --> D["Отдельный поток channel-CHANNEL_ID"]
+    D --> E["cv2.VideoCapture(source)"]
+    E --> F["cap.read() to frame"]
 
-    F --> G[Preview ветка]
-    G --> H[cv2.imencode jpg]
-    H --> I[latest_jpeg в памяти<br/>ChannelContext]
-    I --> J[/api/channels/{id}/snapshot.jpg]
-    I --> K[/api/channels/{id}/preview.mjpg]
-    K --> L[Web UI]
+    F --> G["Preview ветка"]
+    G --> H["cv2.imencode jpg"]
+    H --> I["latest_jpeg в памяти<br/>ChannelContext"]
+    I --> J["Snapshot endpoint"]
+    I --> K["Preview MJPEG endpoint"]
+    K --> L["Web UI"]
 
-    F --> M[ANPR ветка]
-    M --> N[YOLODetector.track(frame)]
-    N --> O[ANPRPipeline.process_frame]
+    F --> M["ANPR ветка"]
+    M --> N["YOLODetector.track(frame)"]
+    N --> O["ANPRPipeline.process_frame(...)"]
 ```
 
 ---
@@ -177,29 +177,29 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A[Frame] --> B[YOLODetector.track]
-    B --> C{Фильтр размера номера<br/>min/max plate size}
-    C -->|Не подходит| Z[Пропуск detection]
-    C -->|Подходит| D[TrackDirectionEstimator.update]
-    D --> E[Вырезание bbox из кадра]
-    E --> F[PlatePreprocessor.preprocess]
-    F --> G[CRNNRecognizer.recognize_batch]
+    A["Frame"] --> B["YOLODetector.track(frame)"]
+    B --> C{"Размер номера подходит?"}
+    C -->|Нет| Z["Пропуск detection"]
+    C -->|Да| D["TrackDirectionEstimator.update(...)"]
+    D --> E["Вырезание bbox из кадра"]
+    E --> F["PlatePreprocessor.preprocess(...)"]
+    F --> G["CRNNRecognizer.recognize_batch(...)"]
 
-    G --> H{confidence >= ocr_min_confidence}
-    H -->|Нет| U[Пометить как unreadable]
-    H -->|Да| I{Есть track_id?}
+    G --> H{"confidence >= ocr_min_confidence?"}
+    H -->|Нет| U["Пометить как unreadable"]
+    H -->|Да| I{"Есть track_id?"}
 
-    I -->|Да| J[TrackAggregator<br/>best shots + quorum + weighted majority]
-    I -->|Нет| K[Использовать текущий OCR текст]
+    I -->|Да| J["TrackAggregator<br/>best shots + quorum + weighted majority"]
+    I -->|Нет| K["Использовать текущий OCR текст"]
 
-    J --> L[PlatePostProcessor.process]
+    J --> L["PlatePostProcessor.process(...)"]
     K --> L
 
-    L --> M{Номер валиден?}
+    L --> M{"Номер валиден?"}
     M -->|Нет| Z
-    M -->|Да| N{Cooldown прошёл?}
+    M -->|Да| N{"Cooldown прошёл?"}
     N -->|Нет| Z
-    N -->|Да| O[Сформировать готовое событие]
+    N -->|Да| O["Сформировать готовое событие"]
 ```
 
 ---
@@ -208,24 +208,24 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A[Готовое событие] --> B[DualEventSink.insert_event]
+    A["Готовое событие"] --> B["DualEventSink.insert_event(...)"]
 
-    B --> C{Есть postgres_dsn?}
-    C -->|Да| D[PostgresEventDatabase.insert_event]
-    D --> E{dual_write_enabled?}
-    E -->|Да| F[SQLite compatibility write]
-    E -->|Нет| G[Только PostgreSQL]
-    C -->|Нет| H[SQLite EventDatabase.insert_event]
+    B --> C{"Есть postgres_dsn?"}
+    C -->|Да| D["PostgresEventDatabase.insert_event(...)"]
+    D --> E{"dual_write_enabled?"}
+    E -->|Да| F["SQLite compatibility write"]
+    E -->|Нет| G["Только PostgreSQL"]
+    C -->|Нет| H["SQLite EventDatabase.insert_event(...)"]
 
-    A --> I[event_callback]
-    I --> J[EventBus.publish]
-    J --> K[/api/events/stream]
-    K --> L[EventSource в Web UI]
+    A --> I["event_callback"]
+    I --> J["EventBus.publish(...)"]
+    J --> K["SSE endpoint for events stream"]
+    K --> L["EventSource в Web UI"]
 
-    D --> M[/api/events]
+    D --> M["REST endpoint for events list"]
     F --> M
     H --> M
-    M --> N[Журнал событий / детали события]
+    M --> N["Журнал событий / детали события"]
 ```
 
 ---
@@ -236,13 +236,13 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    A[Камера / RTSP] --> B[Server-side ChannelProcessor]
-    B --> C[cap.read]
-    C --> D[cv2.imencode jpg]
-    D --> E[latest_jpeg cache]
-    E --> F[/api/channels/{id}/snapshot.jpg]
-    E --> G[/api/channels/{id}/preview.mjpg]
-    G --> H[img / preview блок в Web UI]
+    A["Камера / RTSP"] --> B["Server-side ChannelProcessor"]
+    B --> C["cap.read()"]
+    C --> D["cv2.imencode jpg"]
+    D --> E["latest_jpeg cache"]
+    E --> F["Snapshot endpoint"]
+    E --> G["Preview MJPEG endpoint"]
+    G --> H["img / preview блок в Web UI"]
 ```
 
 ---
@@ -251,19 +251,19 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    A[Storage policy] --> B[Retention worker startup]
-    B --> C[RetentionScheduler.start]
-    C --> D{auto_cleanup_enabled}
-    D -->|Да| E[run_retention_cycle]
-    D -->|Нет| J[Sleep]
+    A["Storage policy"] --> B["Retention worker startup"]
+    B --> C["RetentionScheduler.start()"]
+    C --> D{"auto_cleanup_enabled?"}
+    D -->|Да| E["run_retention_cycle()"]
+    D -->|Нет| J["Sleep"]
 
-    E --> F[cleanup_old_events]
-    E --> G[cleanup_old_media]
-    E --> H[enforce_storage_limit]
-    E --> I[export / bundle API uses same lifecycle service]
+    E --> F["cleanup_old_events()"]
+    E --> G["cleanup_old_media()"]
+    E --> H["enforce_storage_limit()"]
+    E --> I["export and bundle use same lifecycle service"]
 
-    F --> K[(SQLite / PostgreSQL)]
-    G --> L[(media dir)]
+    F --> K[("SQLite / PostgreSQL")]
+    G --> L[("media dir")]
     H --> L
 
     J --> C
