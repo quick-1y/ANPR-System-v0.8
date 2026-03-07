@@ -34,35 +34,128 @@ Web-first система автоматического распознавани
 
 ```mermaid
 flowchart TD
-    A[Видеопоток] --> B{Детектор движения в ROI}
+    %% ===== UI / Client =====
+    USER[Оператор / Браузер]
+    WEB[Web UI\napps/web/index.html]
 
-    B -->|Обнаружено| C[YOLOv8 + трекинг объекта]
-    B -->|Нет| Z[Пропуск кадра]
+    USER --> WEB
 
-    C --> D{Проверка размера номера}
-    D -->|В пределах| E[Сбор лучших кадров по треку]
-    D -->|Вне диапазона| Z
+    %% ===== API =====
+    subgraph API_SVC[API service — FastAPI / Uvicorn\napps/api/main.py]
+        API[HTTP API + web entrypoint]
+        CFG[SettingsManager\nsettings.json]
+        PROC[ChannelProcessor]
+        BUS[EventBus\nin-memory pub/sub]
+        LIFE[DataLifecycleService]
+        EVDB[EventDatabase / PostgresEventDatabase]
+        LISTDB[ListDatabase]
+        CTRL[ControllerService]
+    end
 
-    E --> F[Коррекция перспективы номера]
-    F --> G[Пакетный OCR CRNN]
+    WEB -->|GET /, StaticFiles /web| API
+    WEB -->|REST /api/channels /events /lists /settings /controllers| API
+    WEB -->|SSE /api/events/stream| BUS
 
-    G --> H{Консенсусное решение}
-    H -->|Кворум достигнут| I[Валидация и постобработка]
-    H -->|Недостаточно данных| Z
+    API --> CFG
+    API --> PROC
+    API --> EVDB
+    API --> LIFE
+    API --> LISTDB
+    API --> CTRL
+    API --> BUS
 
-    I --> J{Проверка кулдауна}
-    J -->|Кулдаун прошёл| K[Сохранение в БД и на диск]
-    J -->|В кулдауне| Z
+    %% ===== Runtime / Core =====
+    subgraph CORE[ANPR Core runtime\npackages/anpr_core + anpr/*]
+        SRC[RTSP / файл / камера]
+        CH[Поток канала\n1 thread на канал]
+        PREVIEW[latest_jpeg / preview buffer]
+        MOTION[MotionDetector\nROI + stride + hysteresis]
+        YOLO[YOLODetector\ntrack / detect + size filter]
+        PIPE[ANPRPipeline]
+        PRE[PlatePreprocessor]
+        OCR[CRNNRecognizer]
+        AGG[TrackAggregator\nconsensus / best shots]
+        DIR[TrackDirectionEstimator]
+        POST[PlatePostProcessor / Validator\ncountry configs]
+        SINK[DualEventSink]
+    end
 
-    K --> M{Фильтр по спискам}
-    M -->|Пройден| N[Команда контроллеру]
-    M -->|Нет| P[Публикация события через API]
-    N --> P
+    PROC -->|ensure/start/stop/restart| CH
+    CFG -->|channels / plate settings / storage settings| PROC
 
-    P --> Q[SSE / REST обновление]
-    Q --> L[Web UI (конечная точка отображения)]
+    SRC --> CH
+    CH -->|periodic JPEG encode| PREVIEW
+    PREVIEW --> API
 
-    Z --> A
+    CH -->|кадры| MOTION
+    MOTION -->|движение активно| YOLO
+    MOTION -->|нет движения| CH
+    YOLO -->|bbox + track_id| PIPE
+    PIPE --> PRE
+    PRE --> OCR
+    OCR --> AGG
+    PIPE --> DIR
+    AGG --> POST
+    POST -->|валидный plate text| SINK
+
+    SINK -->|insert_event| EVDB
+    SINK -->|готовое событие| PROC
+    PROC -->|event_callback| BUS
+
+    %% ===== Admin / auxiliary =====
+    subgraph ADMIN[Админский и вспомогательный контур]
+        LISTS[Белые/черные/custom списки]
+        CONTROLLERS[Сетевые контроллеры\nDTWONDER2CH и др.]
+    end
+
+    LISTDB --> LISTS
+    CTRL --> CONTROLLERS
+    API -->|CRUD списков| LISTDB
+    API -->|CRUD / test controller| CTRL
+
+    %% ===== Storage =====
+    subgraph STORAGE[Storage]
+        SQLITE[(SQLite)]
+        PG[(PostgreSQL)]
+        MEDIA[(Media dir / screenshots / crops\nесли файлы создаются)]
+        EXPORTS[(CSV / ZIP exports)]
+    end
+
+    EVDB --> SQLITE
+    EVDB --> PG
+    SINK -->|primary write при postgres_dsn| PG
+    SINK -->|compat / fallback write| SQLITE
+    LIFE --> SQLITE
+    LIFE --> PG
+    LIFE --> MEDIA
+    LIFE --> EXPORTS
+
+    %% ===== Worker =====
+    subgraph WORKER[Retention Worker service\napps/worker/main.py]
+        SCH[RetentionScheduler]
+        WLIFE[DataLifecycleService]
+    end
+
+    CFG -->|storage policy| SCH
+    SCH -->|periodic retention cycle| WLIFE
+    WLIFE --> SQLITE
+    WLIFE --> PG
+    WLIFE --> MEDIA
+    WLIFE --> EXPORTS
+
+    %% ===== Deployment =====
+    subgraph DEPLOY[infra/docker-compose.yml]
+        DC[docker-compose]
+        API_C[api]
+        W_C[retention_worker]
+        PG_C[postgres:16]
+    end
+
+    DC --> API_C
+    DC --> W_C
+    DC --> PG_C
+    API_C -. POSTGRES_DSN .-> PG
+    W_C -. POSTGRES_DSN .-> PG
 ```
 
 ## Технологический стек
