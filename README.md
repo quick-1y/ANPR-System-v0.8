@@ -30,44 +30,39 @@ Web-first система автоматического распознавани
 - **Worker** — фоновые задачи хранения и retention
 - **ANPR Core** — распознавание, OCR, трекинг и обработка событий
 
-Диаграмма взаимодействия компонентов:
+Диаграмма server-side обработки (web-версия):
 
 ```mermaid
-flowchart LR
-    OP[Оператор\nБраузер / Web UI]
+flowchart TD
+    A[Видеопоток канала] --> B{Детектор движения в ROI}
 
-    subgraph API[apps/api — FastAPI + Web entrypoint]
-        CH[Channel API\nCRUD / start-stop-restart / ROI / lists]
-        SSE[SSE stream\nсобытия и статусы]
-        PREV[Built-in preview API\nsnapshot.jpg / preview/status / preview.mjpg]
-        DATA[Data API\nretention / export CSV-ZIP / storage mode]
-    end
+    B -->|Обнаружено| C[Detection + tracking<br/>YOLOv8 / track]
+    B -->|Нет| Z[Пропуск кадра]
 
-    subgraph CORE[packages/anpr_core + anpr]
-        RT[Изолированный runtime на канал\nзахват кадра / reconnect / metrics]
-        PIPE[ANPR pipeline\nDetection → OCR → postprocessing]
-        EVT[Event sink / persistence]
-    end
+    C --> D{Проверка размера номера}
+    D -->|В пределах| E[Сбор лучших кадров по треку]
+    D -->|Вне диапазона| Z
 
-    WRK[apps/worker\nпланировщик retention]
-    DB[(SQLite / PostgreSQL)]
-    FS[(media files\nframes / crops)]
+    E --> F[Коррекция перспективы номера]
+    F --> G[Пакетный OCR<br/>CRNN]
 
-    OP -->|HTTP/REST| CH
-    OP -->|SSE| SSE
-    OP -->|MJPEG| PREV
-    OP -->|Retention / Export actions| DATA
+    G --> H{Консенсус по распознаванию}
+    H -->|Кворум достигнут| I[Валидация и постобработка]
+    H -->|Недостаточно данных| Z
 
-    CH --> RT
-    PREV --> RT
-    RT --> PIPE
-    PIPE --> EVT
-    EVT --> DB
-    EVT --> FS
+    I --> J{Проверка кулдауна}
+    J -->|Кулдаун прошёл| K[Сохранение события<br/>БД + media на диск]
+    J -->|В кулдауне| Z
 
-    DATA --> DB
-    WRK -->|periodic cleanup| DB
-    WRK -->|media cleanup| FS
+    K --> M{Фильтр по спискам}
+    M -->|Пройден| N[Команда контроллеру]
+    M -->|Не пройден| L[Публикация события в API]
+    N --> L
+
+    L --> S[SSE/REST update]
+    S --> UI[Web UI оператора<br/>конечная точка отображения]
+
+    Z --> A
 ```
 
 ## Технологический стек
