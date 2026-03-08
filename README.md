@@ -464,11 +464,10 @@ ANPR-System-v0.8_web/
 │   ├── recognition/
 │   ├── postprocessing/
 │   └── infrastructure/
-├── infra/
-│   ├── docker-compose.yml
-│   ├── postgres/
-│   ├── nginx/
-│   └── k8s/
+├── database/
+│   ├── postgres/           # SQL-схема и init-артефакты PostgreSQL
+│   └── README.md
+├── docker-compose.yml
 ├── config/
 ├── models/
 ├── scripts/
@@ -541,7 +540,6 @@ python -m uvicorn apps.worker.main:app --host 0.0.0.0 --port 8092
 ## Docker Compose
 
 ```bash
-cd infra
 docker compose up --build
 ```
 
@@ -549,6 +547,8 @@ docker compose up --build
 - `api`
 - `retention_worker`
 - `postgres`
+
+Инициализация PostgreSQL выполняется через `database/postgres/schema.sql`.
 
 Compose передаёт `POSTGRES_DSN=postgresql://anpr:anpr@postgres:5432/anpr` и публикует порты:
 - `8080` — API / Web UI

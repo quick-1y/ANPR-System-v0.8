@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Optional, Sequence
 
 from .logging_manager import get_logger
 
 logger = get_logger(__name__)
+_SCHEMA_SQL_PATH = Path(__file__).resolve().parents[2] / "database" / "postgres" / "schema.sql"
 
 
 class StorageUnavailableError(RuntimeError):
@@ -50,23 +52,10 @@ class PostgresEventDatabase:
         with self._init_lock:
             if self._initialized:
                 return
-            query = """
-            CREATE TABLE IF NOT EXISTS events (
-                id BIGSERIAL PRIMARY KEY,
-                timestamp TIMESTAMPTZ NOT NULL,
-                channel TEXT NOT NULL,
-                plate TEXT NOT NULL,
-                country TEXT,
-                confidence DOUBLE PRECISION,
-                source TEXT,
-                frame_path TEXT,
-                plate_path TEXT,
-                direction TEXT
-            );
-            CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp DESC);
-            CREATE INDEX IF NOT EXISTS idx_events_channel ON events(channel);
-            CREATE INDEX IF NOT EXISTS idx_events_plate ON events(plate);
-            """
+            try:
+                query = _SCHEMA_SQL_PATH.read_text(encoding="utf-8")
+            except OSError as exc:
+                raise StorageUnavailableError(f"Не удалось прочитать SQL-схему {_SCHEMA_SQL_PATH}: {exc}") from exc
             try:
                 with self._connect() as conn:
                     with conn.cursor() as cursor:
