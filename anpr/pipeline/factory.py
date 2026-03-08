@@ -77,7 +77,7 @@ def _get_shared_recognizer() -> CRNNRecognizer:
 
 
 def _build_postprocessor(config: Dict[str, object]) -> PlatePostProcessor:
-    config_dir = str(config.get("config_dir") or "config/countries")
+    config_dir = str(config.get("config_dir") or "anpr/countries")
     enabled_countries = config.get("enabled_countries")
     loader = CountryConfigLoader(os.path.abspath(config_dir))
     loader.ensure_dir()

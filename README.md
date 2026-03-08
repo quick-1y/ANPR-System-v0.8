@@ -67,7 +67,7 @@ Web-first система автоматического распознавани
 
 - Docker Engine 24+
 - Docker Compose v2+
-- Файлы моделей в `models/`
+- Файлы моделей в `anpr/models/`
 
 ### Подготовка конфигурации
 
@@ -533,7 +533,7 @@ ANPR-System-v0.8_web/
 ├── apps/
 │   ├── api/                 # backend API, preview, export, settings
 │   ├── worker/              # retention worker
-│   ├── web/                 # web UI
+│   ├── web/                 # web UI (включая статические флаги: web/images/flags)
 │   └── video_gateway/       # legacy / optional
 ├── packages/
 │   └── anpr_core/           # channel runtime, event bus, sink
@@ -543,13 +543,14 @@ ANPR-System-v0.8_web/
 │   ├── preprocessing/
 │   ├── recognition/
 │   ├── postprocessing/
-│   └── infrastructure/
+│   ├── infrastructure/
+│   ├── models/
+│   └── countries/
 ├── database/
 │   ├── postgres/           # SQL-схема и init-артефакты PostgreSQL
 │   └── README.md
 ├── docker-compose.yml
-├── config/
-├── models/
+├── nginx/
 ├── scripts/
 ├── data/
 ├── logs/

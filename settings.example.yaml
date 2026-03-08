@@ -1,7 +1,7 @@
 settings_version: 2
 models:
-  yolo_model_path: models/yolo/best.pt
-  ocr_model_path: models/ocr_crnn/crnn_ocr_model_int8_fx.pth
+  yolo_model_path: anpr/models/yolo/best.pt
+  ocr_model_path: anpr/models/ocr_crnn/crnn_ocr_model_int8_fx.pth
   device: cpu
 ocr:
   img_height: 32
@@ -90,7 +90,7 @@ tracking:
     jitter_pixels: 1.0
     min_area_change_ratio: 0.02
 plates:
-  config_dir: config/countries
+  config_dir: anpr/countries
   enabled_countries: [RU, UA, BY, KZ]
 logging:
   level: INFO

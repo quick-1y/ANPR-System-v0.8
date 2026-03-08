@@ -1,4 +1,4 @@
-#config/countries/russia.yaml
+#anpr/countries/russia.yaml
 name: "Российская Федерация"
 code: "RU"
 priority: 1
