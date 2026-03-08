@@ -62,8 +62,6 @@ def reconnect_defaults() -> Dict[str, Any]:
 
 def storage_defaults() -> Dict[str, Any]:
     return {
-        "db_dir": "data/db",
-        "database_file": "anpr.db",
         "screenshots_dir": "data/screenshots",
         "logs_dir": "logs",
         "auto_cleanup_enabled": True,
@@ -72,7 +70,6 @@ def storage_defaults() -> Dict[str, Any]:
         "media_retention_days": 14,
         "max_screenshots_mb": 4096,
         "export_dir": "data/exports",
-        "dual_write_enabled": False,
         "postgres_dsn": os.getenv("POSTGRES_DSN", "postgresql://anpr:anpr@127.0.0.1:5432/anpr"),
     }
 

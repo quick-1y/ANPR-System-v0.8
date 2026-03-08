@@ -16,7 +16,7 @@ from anpr.infrastructure.controller_service import ControllerService
 from anpr.infrastructure.list_database import ListDatabase
 from anpr.infrastructure.logging_manager import get_logger
 from anpr.infrastructure.settings_manager import SettingsManager
-from anpr.infrastructure.storage import EventDatabase, PostgresEventDatabase
+from anpr.infrastructure.storage import PostgresEventDatabase, StorageUnavailableError
 from apps.api.data_lifecycle import DataLifecycleService, RetentionPolicy
 from packages.anpr_core.channel_runtime import ChannelProcessor
 from packages.anpr_core.event_bus import EventBus
@@ -115,10 +115,6 @@ class RetentionPolicyPayload(BaseModel):
     export_dir: str = "data/exports"
 
 
-class DualWritePayload(BaseModel):
-    dual_write_enabled: bool = False
-    postgres_dsn: str = ""
-
 
 class ExportBundlePayload(BaseModel):
     start: Optional[str] = None
@@ -144,8 +140,7 @@ class ReconnectPayload(BaseModel):
 
 
 class StoragePayload(BaseModel):
-    db_dir: str
-    database_file: str
+    postgres_dsn: str
     screenshots_dir: str
     logs_dir: str
     auto_cleanup_enabled: bool
@@ -154,8 +149,6 @@ class StoragePayload(BaseModel):
     media_retention_days: int = Field(ge=1, le=3650)
     max_screenshots_mb: int = Field(ge=128, le=1024 * 1024)
     export_dir: str
-    dual_write_enabled: bool = False
-    postgres_dsn: str = ""
 
 
 class LoggingPayload(BaseModel):
@@ -195,19 +188,13 @@ class GlobalSettingsPayload(BaseModel):
 settings = SettingsManager()
 
 
-def _create_events_db() -> EventDatabase | PostgresEventDatabase:
+def _create_events_db() -> PostgresEventDatabase:
     storage = settings.get_storage_settings()
-    postgres_dsn = str(storage.get("postgres_dsn", "")).strip()
-    if postgres_dsn:
-        try:
-            return PostgresEventDatabase(postgres_dsn)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("PostgreSQL недоступен, fallback на SQLite events DB: %s", exc)
-    return EventDatabase(settings.get_db_path())
+    return PostgresEventDatabase(str(storage.get("postgres_dsn", "")).strip())
 
 
 events_db = _create_events_db()
-lists_db = ListDatabase(settings.get_db_path())
+lists_db = ListDatabase(str(settings.get_storage_settings().get("postgres_dsn", "")).strip())
 controller_service = ControllerService()
 event_bus = EventBus()
 MAIN_LOOP: asyncio.AbstractEventLoop | None = None
@@ -217,7 +204,6 @@ STREAM_SHUTDOWN = asyncio.Event()
 def _create_processor() -> ChannelProcessor:
     return ChannelProcessor(
         event_callback=_publish_event_sync,
-        db_path=settings.get_db_path(),
         plate_settings=settings.get_plate_settings(),
         storage_settings=settings.get_storage_settings(),
     )
@@ -227,12 +213,24 @@ def _build_lifecycle() -> DataLifecycleService:
     storage = settings.get_storage_settings()
     policy = RetentionPolicy.from_storage(storage)
     return DataLifecycleService(
-        db_path=settings.get_db_path(),
         screenshots_dir=settings.get_screenshot_dir(),
         policy=policy,
         postgres_dsn=str(storage.get("postgres_dsn", "")).strip(),
     )
 
+
+
+
+def _storage_503(exc: Exception) -> HTTPException:
+    return HTTPException(status_code=503, detail=f"PostgreSQL недоступен: {exc}")
+
+
+def _db_status() -> Dict[str, Any]:
+    try:
+        events_db.fetch_recent(limit=1)
+        return {"status": "ok", "backend": "postgresql"}
+    except StorageUnavailableError as exc:
+        return {"status": "degraded", "backend": "postgresql", "detail": str(exc)}
 
 def _publish_event_sync(event: Dict[str, Any]) -> None:
     if MAIN_LOOP and MAIN_LOOP.is_running():
@@ -305,6 +303,11 @@ def health() -> Dict[str, Any]:
         "channels_total": len(settings.get_channels()),
         "channels_running": sum(1 for item in metrics.values() if item.state == "running"),
     }
+
+
+@app.get("/api/storage/status")
+def storage_status() -> Dict[str, Any]:
+    return _db_status()
 
 
 @app.get("/api/channels")
@@ -510,12 +513,18 @@ def restart_channel(channel_id: int) -> Dict[str, str]:
 
 @app.get("/api/events")
 def list_events(limit: int = 100) -> List[Dict[str, Any]]:
-    rows = events_db.fetch_recent(limit=limit)
-    return [dict(row) for row in rows]
+    try:
+        rows = events_db.fetch_recent(limit=limit)
+        return [dict(row) for row in rows]
+    except StorageUnavailableError as exc:
+        raise _storage_503(exc) from exc
 
 
 def _fetch_event_by_id(event_id: int) -> Dict[str, Any] | None:
-    row = events_db.fetch_by_id(event_id)
+    try:
+        row = events_db.fetch_by_id(event_id)
+    except StorageUnavailableError as exc:
+        raise _storage_503(exc) from exc
     if row is None:
         return None
     if isinstance(row, dict):
@@ -615,26 +624,38 @@ def test_controller(controller_id: int, payload: ControllerTestPayload) -> Dict[
 
 @app.get("/api/lists")
 def list_plate_lists() -> List[Dict[str, Any]]:
-    return lists_db.list_lists()
+    try:
+        return lists_db.list_lists()
+    except StorageUnavailableError as exc:
+        raise _storage_503(exc) from exc
 
 
 @app.post("/api/lists")
 def create_plate_list(payload: ListPayload) -> Dict[str, Any]:
-    list_id = lists_db.create_list(payload.name, payload.type)
-    return {"id": list_id, "name": payload.name, "type": payload.type}
+    try:
+        list_id = lists_db.create_list(payload.name, payload.type)
+        return {"id": list_id, "name": payload.name, "type": payload.type}
+    except StorageUnavailableError as exc:
+        raise _storage_503(exc) from exc
 
 
 @app.get("/api/lists/{list_id}/entries")
 def list_entries(list_id: int) -> List[Dict[str, Any]]:
-    return lists_db.list_entries(list_id)
+    try:
+        return lists_db.list_entries(list_id)
+    except StorageUnavailableError as exc:
+        raise _storage_503(exc) from exc
 
 
 @app.post("/api/lists/{list_id}/entries")
 def add_entry(list_id: int, payload: EntryPayload) -> Dict[str, Any]:
-    entry_id = lists_db.add_entry(list_id=list_id, plate=payload.plate, comment=payload.comment)
-    if not entry_id:
-        raise HTTPException(status_code=409, detail="Номер уже существует или пуст")
-    return {"id": entry_id}
+    try:
+        entry_id = lists_db.add_entry(list_id=list_id, plate=payload.plate, comment=payload.comment)
+        if not entry_id:
+            raise HTTPException(status_code=409, detail="Номер уже существует или пуст")
+        return {"id": entry_id}
+    except StorageUnavailableError as exc:
+        raise _storage_503(exc) from exc
 
 
 @app.get("/api/data/policy")
@@ -648,28 +669,6 @@ def update_data_policy(payload: RetentionPolicyPayload) -> Dict[str, Any]:
     lifecycle.update_policy(policy)
     settings.save_storage_settings(policy.to_storage())
     return {"status": "updated", "policy": policy.to_storage()}
-
-
-@app.get("/api/storage/dual-write")
-def get_dual_write() -> Dict[str, Any]:
-    storage = settings.get_storage_settings()
-    return {
-        "dual_write_enabled": bool(storage.get("dual_write_enabled", False)),
-        "postgres_dsn": str(storage.get("postgres_dsn", "")),
-        "postgres_primary": bool(str(storage.get("postgres_dsn", "")).strip()),
-    }
-
-
-@app.put("/api/storage/dual-write")
-def update_dual_write(payload: DualWritePayload) -> Dict[str, Any]:
-    if not payload.postgres_dsn.strip():
-        raise HTTPException(status_code=422, detail="postgres_dsn обязателен: PostgreSQL является primary backend")
-    settings.save_storage_settings(payload.model_dump())
-    _restart_processor_for_settings()
-    global events_db, lifecycle
-    events_db = _create_events_db()
-    lifecycle = _build_lifecycle()
-    return {"status": "updated", **payload.model_dump(), "postgres_primary": True}
 
 
 @app.get("/api/settings")
@@ -697,31 +696,41 @@ def put_global_settings(payload: GlobalSettingsPayload) -> Dict[str, Any]:
     settings.save_debug_settings(payload.debug.model_dump())
     settings.save_logging_config(payload.logging.model_dump())
 
-    global events_db, lifecycle
+    global events_db, lifecycle, lists_db
     events_db = _create_events_db()
     lifecycle = _build_lifecycle()
+    lists_db = ListDatabase(str(settings.get_storage_settings().get("postgres_dsn", "")).strip())
     _restart_processor_for_settings()
     return get_global_settings()
 
 
 @app.post("/api/data/retention/run")
 def run_retention() -> Dict[str, Any]:
-    result = lifecycle.run_retention_cycle()
-    return {"status": "ok", **result}
+    try:
+        result = lifecycle.run_retention_cycle()
+        return {"status": "ok", **result}
+    except StorageUnavailableError as exc:
+        return {"status": "error", "detail": str(exc)}
 
 
 @app.get("/api/data/export/events.csv")
 def export_events_csv(start: Optional[str] = None, end: Optional[str] = None, channel: Optional[str] = None) -> FileResponse:
-    path = lifecycle.export_events_csv(start=start, end=end, channel=channel)
-    return FileResponse(path=path, filename=Path(path).name, media_type="text/csv")
+    try:
+        path = lifecycle.export_events_csv(start=start, end=end, channel=channel)
+        return FileResponse(path=path, filename=Path(path).name, media_type="text/csv")
+    except StorageUnavailableError as exc:
+        raise _storage_503(exc) from exc
 
 
 @app.post("/api/data/export/bundle")
 def export_events_bundle(payload: ExportBundlePayload) -> FileResponse:
-    path = lifecycle.export_events_bundle(
-        start=payload.start,
-        end=payload.end,
-        channel=payload.channel,
-        include_media=payload.include_media,
-    )
-    return FileResponse(path=path, filename=Path(path).name, media_type="application/zip")
+    try:
+        path = lifecycle.export_events_bundle(
+            start=payload.start,
+            end=payload.end,
+            channel=payload.channel,
+            include_media=payload.include_media,
+        )
+        return FileResponse(path=path, filename=Path(path).name, media_type="application/zip")
+    except StorageUnavailableError as exc:
+        raise _storage_503(exc) from exc

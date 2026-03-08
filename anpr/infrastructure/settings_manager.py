@@ -325,13 +325,6 @@ class SettingsManager:
         changed = False
         storage = data.get("storage", {})
 
-        # Миграция со старого ключа events_db -> db_dir + database_file
-        if "events_db" in storage:
-            legacy_path = storage.get("events_db", "data/events.db")
-            storage.setdefault("db_dir", os.path.dirname(legacy_path) or ".")
-            storage.setdefault("database_file", os.path.basename(legacy_path) or "anpr.db")
-            changed = True
-
         for key, val in defaults.items():
             if key not in storage:
                 storage[key] = val
@@ -578,29 +571,6 @@ class SettingsManager:
     def save_reconnect(self, reconnect_conf: Dict[str, Any]) -> None:
         with self._file_lock:
             self.settings["reconnect"] = reconnect_conf
-            settings_snapshot = copy.deepcopy(self.settings)
-        self._save(settings_snapshot)
-
-    def get_db_dir(self) -> str:
-        with self._file_lock:
-            storage = self.settings.get("storage", {})
-            return storage.get("db_dir", "data/db")
-
-    def get_database_file(self) -> str:
-        with self._file_lock:
-            storage = self.settings.get("storage", {})
-            return storage.get("database_file", "anpr.db")
-
-    def get_db_path(self) -> str:
-        directory = self.get_db_dir()
-        filename = self.get_database_file()
-        return os.path.join(directory, filename)
-
-    def save_db_dir(self, path: str) -> None:
-        with self._file_lock:
-            storage = self.settings.get("storage", {})
-            storage["db_dir"] = path
-            self.settings["storage"] = storage
             settings_snapshot = copy.deepcopy(self.settings)
         self._save(settings_snapshot)
 

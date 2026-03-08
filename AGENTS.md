@@ -44,6 +44,8 @@ Each channel must work independently from the others.
 
 ## Storage and config rules
 
+- PostgreSQL is the only supported storage backend for runtime data.
+- Do not add SQLite, dual-write, fallback storage paths, or compatibility layers.
 - Do not introduce a second source of truth for settings if existing settings/config already cover the case.
 - If you change storage behavior, keep docs and config consistent with the real implementation.
 - Do not claim a migration or refactor is complete unless the code actually matches that claim.

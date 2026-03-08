@@ -54,7 +54,7 @@ class ChannelRuntimeMotionGateTests(unittest.TestCase):
         motion_update_value: bool = True,
     ):
         events = []
-        processor = ChannelProcessor(lambda event: events.append(event), db_path=":memory:")
+        processor = ChannelProcessor(lambda event: events.append(event), storage_settings={"postgres_dsn": "postgresql://stub"})
         channel = {
             "id": 1,
             "name": "Тест",

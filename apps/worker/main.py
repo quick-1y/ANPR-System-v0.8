@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Dict
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 from anpr.infrastructure.settings_manager import SettingsManager
 from apps.api.data_lifecycle import DataLifecycleService, RetentionPolicy
+from anpr.infrastructure.storage import StorageUnavailableError
 
 
 class RetentionScheduler:
@@ -19,7 +20,10 @@ class RetentionScheduler:
         while True:
             policy = self._lifecycle.policy
             if policy.auto_cleanup_enabled:
-                self._last_run = self._lifecycle.run_retention_cycle()
+                try:
+                    self._last_run = self._lifecycle.run_retention_cycle()
+                except StorageUnavailableError:
+                    self._last_run = {"status": "error"}
             await asyncio.sleep(max(60, policy.cleanup_interval_minutes * 60))
 
     def start(self) -> None:
@@ -38,7 +42,6 @@ settings = SettingsManager()
 storage = settings.get_storage_settings()
 policy = RetentionPolicy.from_storage(storage)
 lifecycle = DataLifecycleService(
-    db_path=settings.get_db_path(),
     screenshots_dir=settings.get_screenshot_dir(),
     policy=policy,
     postgres_dsn=str(storage.get("postgres_dsn", "")).strip(),
@@ -69,8 +72,11 @@ def health() -> Dict[str, Any]:
 
 @app.post("/worker/retention/run")
 def run_retention() -> Dict[str, Any]:
-    result = lifecycle.run_retention_cycle()
-    return {"status": "ok", **result}
+    try:
+        result = lifecycle.run_retention_cycle()
+        return {"status": "ok", **result}
+    except StorageUnavailableError as exc:
+        return {"status": "error", "detail": str(exc)}
 
 
 @app.get("/")
