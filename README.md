@@ -5,7 +5,7 @@
 ![Web UI](https://img.shields.io/badge/UI-Web--only-4CAF50.svg)
 ![YOLOv8](https://img.shields.io/badge/Detection-YOLOv8-red.svg)
 ![CRNN](https://img.shields.io/badge/OCR-CRNN-orange.svg)
-![Storage](https://img.shields.io/badge/Data-SQLite%20%2F%20PostgreSQL-lightgrey.svg)
+![Storage](https://img.shields.io/badge/Data-PostgreSQL-blue.svg)
 
 Web-first система автоматического распознавания автомобильных номеров.
 
@@ -25,7 +25,7 @@ Web-first система автоматического распознавани
 - white/black/custom plate lists;
 - управление контроллерами через API;
 - retention / cleanup / CSV / ZIP export;
-- SQLite по умолчанию и PostgreSQL как primary backend с optional compatibility dual-write.
+- PostgreSQL как единственный supported storage backend.
 
 ---
 
@@ -86,7 +86,7 @@ flowchart TD
         PROC["ChannelProcessor"]
         BUS["EventBus"]
         SETTINGS["SettingsManager"]
-        EVENTS_DB["EventDatabase / PostgresEventDatabase"]
+        EVENTS_DB["PostgresEventDatabase"]
         LISTS_DB["ListDatabase"]
         CTRL["ControllerService"]
         LIFE["DataLifecycleService"]
@@ -97,7 +97,7 @@ flowchart TD
         CH["Channel thread"]
         YOLO["YOLODetector"]
         PIPE["ANPRPipeline"]
-        SINK["DualEventSink"]
+        SINK["EventSink"]
     end
 
     subgraph WORKER["Retention worker<br/>apps/worker/main.py"]
@@ -106,7 +106,6 @@ flowchart TD
     end
 
     subgraph STORAGE["Storage"]
-        SQLITE[("SQLite")]
         PG[("PostgreSQL")]
         MEDIA[("Screenshots / crops / exports")]
     end
@@ -134,12 +133,9 @@ flowchart TD
     SSE --> BUS
     PREVIEW --> PROC
 
-    EVENTS_DB --> SQLITE
     EVENTS_DB --> PG
-    LIFE --> SQLITE
     LIFE --> PG
     LIFE --> MEDIA
-    WLIFE --> SQLITE
     WLIFE --> PG
     WLIFE --> MEDIA
     SCH --> WLIFE
@@ -210,14 +206,8 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["Готовое событие"] --> B["DualEventSink.insert_event(...)"]
-
-    B --> C{"Есть postgres_dsn?"}
-    C -->|Да| D["PostgresEventDatabase.insert_event(...)"]
-    D --> E{"dual_write_enabled?"}
-    E -->|Да| F["SQLite compatibility write"]
-    E -->|Нет| G["Только PostgreSQL"]
-    C -->|Нет| H["SQLite EventDatabase.insert_event(...)"]
+    A["Готовое событие"] --> B["EventSink.insert_event(...)"]
+    B --> D["PostgresEventDatabase.insert_event(...)"]
 
     A --> I["event_callback"]
     I --> J["EventBus.publish(...)"]
@@ -225,8 +215,6 @@ flowchart TD
     K --> L["EventSource в Web UI"]
 
     D --> M["REST endpoint for events list"]
-    F --> M
-    H --> M
     M --> N["Журнал событий / детали события"]
 ```
 
@@ -264,7 +252,7 @@ flowchart TD
     E --> H["enforce_storage_limit()"]
     E --> I["export and bundle use same lifecycle service"]
 
-    F --> K[("SQLite / PostgreSQL")]
+    F --> K[("PostgreSQL")]
     G --> L[("media dir")]
     H --> L
 
@@ -330,7 +318,7 @@ flowchart TD
 - `source`
 - `direction`
 
-Событие записывается в storage через `DualEventSink`.
+Событие записывается в storage через `EventSink`.
 
 ### 6. Публикация события в UI
 
@@ -351,7 +339,7 @@ UI параллельно:
 - `apps/api/data_lifecycle.py` — retention, cleanup, export;
 - `packages/anpr_core/channel_runtime.py` — runtime каналов;
 - `packages/anpr_core/event_bus.py` — in-memory pub/sub для live событий;
-- `packages/anpr_core/event_sink.py` — запись событий в SQLite/PostgreSQL.
+- `packages/anpr_core/event_sink.py` — запись событий в PostgreSQL.
 
 ### ANPR
 
@@ -431,8 +419,6 @@ UI параллельно:
 - `POST /api/data/retention/run`
 - `GET /api/data/export/events.csv`
 - `POST /api/data/export/bundle`
-- `GET /api/storage/dual-write`
-- `PUT /api/storage/dual-write`
 
 ### Глобальные настройки
 
@@ -455,7 +441,7 @@ UI параллельно:
 - **ML:** PyTorch 2.8.0, torchvision 0.23.0, torchaudio 2.8.0
 - **Live updates:** SSE
 - **Preview:** MJPEG
-- **Storage:** SQLite / PostgreSQL
+- **Storage:** PostgreSQL
 - **Worker:** отдельный FastAPI-based retention service
 
 ---
@@ -573,49 +559,17 @@ Compose передаёт `POSTGRES_DSN=postgresql://anpr:anpr@postgres:5432/anpr
 
 ## Хранение данных
 
-### SQLite
+### PostgreSQL (обязательно)
 
-По умолчанию события пишутся в SQLite.
+События и списки номеров хранятся только в PostgreSQL через `storage.postgres_dsn` / `POSTGRES_DSN`.
 
-### PostgreSQL
-
-Если указан `postgres_dsn`, PostgreSQL становится primary backend.
-
-### Dual-write
-
-Если включён `dual_write_enabled`, то при записи в PostgreSQL дополнительно выполняется compatibility write в SQLite.
+Если PostgreSQL временно недоступен, сервисы продолжают работать, а DB-зависимые endpoints возвращают controlled degradation (HTTP 503 или `status=error` для retention run).
 
 ### Медиа и экспорт
 
 - медиа сохраняются в `screenshots_dir`;
 - CSV экспорт создаётся в `export_dir`;
 - bundle export упаковывает CSV и доступные медиа в ZIP.
-
----
-
-## PostgreSQL migration path
-
-Если нужен переход с SQLite на PostgreSQL:
-
-### 1. Создать схему
-
-```bash
-psql "$POSTGRES_DSN" -f infra/postgres/schema.sql
-```
-
-### 2. Перенести исторические данные
-
-```bash
-python scripts/sync_sqlite_to_postgres.py \
-  --sqlite data/db/anpr.db \
-  --postgres-dsn "$POSTGRES_DSN"
-```
-
-### 3. Включить primary PostgreSQL / dual-write
-
-Через API или настройки UI задайте:
-- `postgres_dsn`
-- `dual_write_enabled`
 
 ---
 
