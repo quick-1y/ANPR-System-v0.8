@@ -74,11 +74,11 @@ def storage_defaults() -> Dict[str, Any]:
 
 
 def plate_defaults() -> Dict[str, Any]:
-    return {"config_dir": "config/countries", "enabled_countries": ["RU", "UA", "BY", "KZ"]}
+    return {"config_dir": "anpr/countries", "enabled_countries": ["RU", "UA", "BY", "KZ"]}
 
 
 def model_defaults() -> Dict[str, Any]:
-    return {"yolo_model_path": "models/yolo/best.pt", "ocr_model_path": "models/ocr_crnn/crnn_ocr_model_int8_fx.pth", "device": "cpu"}
+    return {"yolo_model_path": "anpr/models/yolo/best.pt", "ocr_model_path": "anpr/models/ocr_crnn/crnn_ocr_model_int8_fx.pth", "device": "cpu"}
 
 
 def inference_defaults() -> Dict[str, Any]:
