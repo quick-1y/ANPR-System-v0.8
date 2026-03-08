@@ -59,6 +59,100 @@ Web-first система автоматического распознавани
 
 ---
 
+## Развёртывание
+
+Поддерживаемая модель runtime: Docker Compose.
+
+### Предварительные требования
+
+- Docker Engine 24+
+- Docker Compose v2+
+- Файлы моделей в `models/`
+
+### Подготовка конфигурации
+
+```bash
+cp .env.example .env
+cp settings.example.yaml settings.yaml
+```
+
+### Рекомендуемый запуск
+
+```bash
+docker compose up -d --build
+```
+
+### Что поднимается
+
+- `nginx` — единственная опубликованная точка входа с хоста;
+- `api` — FastAPI + Web UI + channel runtime orchestration;
+- `retention_worker` — фоновый retention/cleanup;
+- `postgres` — PostgreSQL c инициализацией схемы.
+
+### Порты и доступ
+
+- `HTTP_PORT` (по умолчанию `8080`) публикуется наружу сервисом `nginx`.
+- `postgres` наружу не публикуется и доступен только внутри docker-сети.
+- `api` и `retention_worker` доступны по внутренним DNS-именам контейнерной сети (`api:8080`, `retention_worker:8092`).
+
+Точки доступа:
+- Web UI: `http://localhost:${HTTP_PORT}`
+- API health: `http://localhost:${HTTP_PORT}/api/health`
+- Worker health: `http://localhost:${HTTP_PORT}/worker/health`
+
+### Volumes
+
+- `pgdata` — данные PostgreSQL;
+- `media_data` — `data/screenshots` и `data/exports` для API/worker;
+- `logs_data` — `logs` для API/worker.
+
+### Логи и диагностика
+
+```bash
+docker compose logs -f nginx api retention_worker postgres
+```
+
+Проверки:
+
+```bash
+curl http://localhost:${HTTP_PORT}/api/health
+curl http://localhost:${HTTP_PORT}/worker/health
+curl http://localhost:${HTTP_PORT}/api/channels
+curl -o snapshot.jpg http://localhost:${HTTP_PORT}/api/channels/1/snapshot.jpg
+```
+
+### Обновление / пересборка
+
+```bash
+docker compose pull
+docker compose build --no-cache
+docker compose up -d
+```
+
+### Остановка
+
+```bash
+docker compose down
+```
+
+### Полный сброс данных (осторожно)
+
+```bash
+docker compose down -v
+```
+
+---
+
+## Схема конфигурации
+
+- `.env` — единственный слой переменных окружения для контейнеров (`POSTGRES_*`, `POSTGRES_DSN`, `HTTP_PORT`, `LOG_LEVEL`, `SETTINGS_PATH`).
+- `settings.yaml` — прикладные настройки ANPR runtime (каналы, ROI, OCR/детекция, retention, контроллеры).
+- PostgreSQL — единственный backend runtime-данных (события, списки, записи).
+
+Важно: значения по умолчанию в конфигурации ориентированы на docker-сеть (`postgres` как hostname БД).
+
+---
+
 ## Диаграмма 1. Общая схема взаимодействия сервисов
 
 ```mermaid
@@ -465,100 +559,6 @@ ANPR-System-v0.8_web/
 ├── settings.yaml
 └── settings.example.yaml
 ```
-
----
-
-## Развёртывание
-
-Поддерживаемая модель runtime: Docker Compose.
-
-### Предварительные требования
-
-- Docker Engine 24+
-- Docker Compose v2+
-- Файлы моделей в `models/`
-
-### Подготовка конфигурации
-
-```bash
-cp .env.example .env
-cp settings.example.yaml settings.yaml
-```
-
-### Рекомендуемый запуск
-
-```bash
-docker compose up -d --build
-```
-
-### Что поднимается
-
-- `nginx` — единственная опубликованная точка входа с хоста;
-- `api` — FastAPI + Web UI + channel runtime orchestration;
-- `retention_worker` — фоновый retention/cleanup;
-- `postgres` — PostgreSQL c инициализацией схемы.
-
-### Порты и доступ
-
-- `HTTP_PORT` (по умолчанию `8080`) публикуется наружу сервисом `nginx`.
-- `postgres` наружу не публикуется и доступен только внутри docker-сети.
-- `api` и `retention_worker` доступны по внутренним DNS-именам контейнерной сети (`api:8080`, `retention_worker:8092`).
-
-Точки доступа:
-- Web UI: `http://localhost:${HTTP_PORT}`
-- API health: `http://localhost:${HTTP_PORT}/api/health`
-- Worker health: `http://localhost:${HTTP_PORT}/worker/health`
-
-### Volumes
-
-- `pgdata` — данные PostgreSQL;
-- `media_data` — `data/screenshots` и `data/exports` для API/worker;
-- `logs_data` — `logs` для API/worker.
-
-### Логи и диагностика
-
-```bash
-docker compose logs -f nginx api retention_worker postgres
-```
-
-Проверки:
-
-```bash
-curl http://localhost:${HTTP_PORT}/api/health
-curl http://localhost:${HTTP_PORT}/worker/health
-curl http://localhost:${HTTP_PORT}/api/channels
-curl -o snapshot.jpg http://localhost:${HTTP_PORT}/api/channels/1/snapshot.jpg
-```
-
-### Обновление / пересборка
-
-```bash
-docker compose pull
-docker compose build --no-cache
-docker compose up -d
-```
-
-### Остановка
-
-```bash
-docker compose down
-```
-
-### Полный сброс данных (осторожно)
-
-```bash
-docker compose down -v
-```
-
----
-
-## Схема конфигурации
-
-- `.env` — единственный слой переменных окружения для контейнеров (`POSTGRES_*`, `POSTGRES_DSN`, `HTTP_PORT`, `LOG_LEVEL`, `SETTINGS_PATH`).
-- `settings.yaml` — прикладные настройки ANPR runtime (каналы, ROI, OCR/детекция, retention, контроллеры).
-- PostgreSQL — единственный backend runtime-данных (события, списки, записи).
-
-Важно: значения по умолчанию в конфигурации ориентированы на docker-сеть (`postgres` как hostname БД).
 
 ---
 
