@@ -184,9 +184,10 @@ function renderEventFeed() {
   const events = state.allEvents;
   for (const [i, item] of events.entries()) {
     const conf = Number(item.confidence || 0);
+    const direction = formatDirection(item.direction);
     const div = document.createElement("div");
     div.className = `ev-item ${i === 0 ? "hot" : ""}`;
-    div.innerHTML = `${flagHtml(item.country)}<div class='ev-body'><div class='ev-plate'>${item.plate || "—"}</div><div class='ev-meta'>${item.channel || `CAM-${item.channel_id || ""}`} · <span>${new Date(item.timestamp || Date.now()).toLocaleTimeString()}</span></div></div><div class='ev-conf ${conf < 0.85 ? "warn" : ""}'>${conf.toFixed(2)}</div>`;
+    div.innerHTML = `${flagHtml(item.country)}<div class='ev-body'><div class='ev-plate'>${item.plate || "—"}</div><div class='ev-meta'>${item.channel || `CAM-${item.channel_id || ""}`} · <span>${new Date(item.timestamp || Date.now()).toLocaleTimeString()}</span> · ${direction.label}</div></div><div class='ev-conf ${conf < 0.85 ? "warn" : ""}'>${conf.toFixed(2)}</div>`;
     div.onclick = () => highlightPlate(item);
     feed.appendChild(div);
 
@@ -246,11 +247,21 @@ function renderJournal() {
   body.innerHTML = "";
   rows.forEach((ev) => {
     const conf = Number(ev.confidence || 0);
+    const direction = formatDirection(ev.direction);
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${new Date(ev.timestamp).toLocaleTimeString()}</td><td>${ev.channel || `CAM-${ev.channel_id || ""}`}</td><td>${flagHtml(ev.country)} ${ev.country || ""}</td><td><span class='badge ${(ev.direction || "in") === "in" ? "badge-in" : "badge-out"}'>${(ev.direction || "in") === "in" ? "→ Въезд" : "← Выезд"}</span></td><td class='plate-cell'>${ev.plate || ""}</td><td class='conf-cell' style='color:${conf < 0.85 ? "var(--warning)" : "var(--success)"}'>${conf.toFixed(2)}</td><td>${ev.source || ""}</td>`;
+    tr.innerHTML = `<td>${new Date(ev.timestamp).toLocaleTimeString()}</td><td>${ev.channel || `CAM-${ev.channel_id || ""}`}</td><td>${flagHtml(ev.country)} ${ev.country || ""}</td><td><span class='badge ${direction.badgeClass}'>${direction.label}</span></td><td class='plate-cell'>${ev.plate || ""}</td><td class='conf-cell' style='color:${conf < 0.85 ? "var(--warning)" : "var(--success)"}'>${conf.toFixed(2)}</td><td>${ev.source || ""}</td>`;
     tr.onclick = () => openEventDetails(ev);
     body.appendChild(tr);
   });
+}
+
+function formatDirection(directionValue) {
+  const isIn = (directionValue || "in") === "in";
+  return {
+    badgeClass: isIn ? "badge-in" : "badge-out",
+    label: isIn ? "→ Приближение" : "← Отдаление",
+    plain: isIn ? "Приближение" : "Отдаление",
+  };
 }
 
 async function loadLists() {
@@ -862,7 +873,7 @@ async function openEventDetails(ev) {
     ["Страна", payload.country || "—"],
     ["Гос. номер", payload.plate || "—"],
     ["Уверенность", Number(payload.confidence || 0).toFixed(2)],
-    ["Направление", payload.direction || "—"],
+    ["Направление", formatDirection(payload.direction).plain],
     ["Источник", payload.source || "—"],
   ];
   const meta = document.getElementById("eventMeta");
