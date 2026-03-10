@@ -369,10 +369,19 @@ function parseIds(raw) {
     .filter((x) => Number.isFinite(x));
 }
 
+function applyTheme(theme) {
+  const normalized = String(theme || "dark").toLowerCase() === "light" ? "light" : "dark";
+  document.body.setAttribute("data-theme", normalized);
+  try {
+    localStorage.setItem("anpr_theme", normalized);
+  } catch (_e) {}
+}
+
 async function loadGlobalSettings() {
   const g = await jfetch(api("/api/settings"));
   setVal("g_grid", g.grid);
   setVal("g_theme", g.theme);
+  applyTheme(g.theme);
   setChk("g_sl_enabled", g.reconnect.signal_loss.enabled);
   setVal("g_frame_timeout", g.reconnect.signal_loss.frame_timeout_seconds);
   setVal("g_retry_interval", g.reconnect.signal_loss.retry_interval_seconds);
@@ -401,6 +410,7 @@ async function loadGlobalSettings() {
 }
 
 async function saveGeneral() {
+  applyTheme(val("g_theme"));
   const payload = {
     grid: val("g_grid"),
     theme: val("g_theme"),
@@ -1200,6 +1210,12 @@ document.getElementById("ctrlR1Mode").onchange = () => updateRelayTimerState(1);
 document.getElementById("c_controller_id").onchange = updateChannelControllerBindingState;
 document.getElementById("c_list_filter_mode").onchange = updateCustomListsVisibility;
 document.getElementById("saveDebugBtn").onclick = saveGeneral;
+document.getElementById("g_theme").onchange = () => applyTheme(val("g_theme"));
+document.getElementById("themeToggleBtn").onclick = () => {
+  const nextTheme = val("g_theme") === "light" ? "dark" : "light";
+  setVal("g_theme", nextTheme);
+  applyTheme(nextTheme);
+};
 document.getElementById("roiRefreshBtn").onclick = refreshROISnapshot;
 document.getElementById("roiClearBtn").onclick = () => {
   roiPoints = [];
@@ -1239,6 +1255,11 @@ window.addEventListener("pagehide", () => {
 window.addEventListener("resize", renderEventFeed);
 (async function init() {
   document.getElementById("apiBase").value = window.location.origin;
+  try {
+    applyTheme(localStorage.getItem("anpr_theme") || "dark");
+  } catch (_e) {
+    applyTheme("dark");
+  }
   syncChannelConfigVisibility();
   syncControllerConfigVisibility();
   setupROI();
