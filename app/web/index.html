@@ -374,16 +374,13 @@
           <div class="settings-pane" id="sp-channels">
             <div class="ch-layout">
               <div class="ch-sidebar">
+                <div class="sidebar-toolbar compact-actions">
+                  <button class="icon-btn-sm" id="createChannelBtn">+</button>
+                  <button class="icon-btn-sm" id="deleteChannelBtn">-</button>
+                </div>
                 <div class="ch-list" id="channelsList"></div>
-                <button
-                  class="btn btn-primary"
-                  id="createChannelBtn"
-                  style="margin-top: 8px; width: 100%"
-                >
-                  + Канал
-                </button>
               </div>
-              <div style="flex: 1">
+              <div style="flex: 1" id="channelConfigPane">
                 <div
                   style="
                     display: flex;
@@ -669,13 +666,12 @@
                 </div>
                 <div style="display: flex; gap: 8px">
                   <button class="btn btn-primary" id="saveChannelBtn">
-                    Сохранить канал</button
-                  ><button class="btn btn-ghost" id="deleteChannelBtn">
-                    Удалить канал</button
-                  ><button class="btn btn-ghost" id="roiRefreshBtnBottom">
-                    Обновить кадр
+                    Сохранить канал
                   </button>
                 </div>
+              </div>
+              <div class="empty-pane" id="channelConfigEmpty">
+                Выберите канал в списке или создайте новый.
               </div>
             </div>
           </div>
@@ -716,7 +712,7 @@
                   "
                 ></div>
               </div>
-              <div style="flex: 1">
+              <div style="flex: 1" id="controllerConfigPane">
                 <div class="s-card">
                   <div class="s-card-header">Параметры контроллера</div>
                   <div class="s-card-body">
@@ -823,6 +819,9 @@
                 <button class="btn btn-primary" id="saveControllerBtn">
                   Сохранить контроллер
                 </button>
+              </div>
+              <div class="empty-pane" id="controllerConfigEmpty">
+                Выберите контроллер в списке или создайте новый.
               </div>
             </div>
           </div>
