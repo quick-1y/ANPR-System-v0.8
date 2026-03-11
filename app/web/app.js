@@ -43,6 +43,7 @@ function switchTab(name) {
     .querySelectorAll(".tab-pane")
     .forEach((p) => p.classList.remove("active"));
   document.getElementById(`tab-${name}`).classList.add("active");
+  if (name === "obs") scheduleVideoGridLayout();
 }
 function switchSettings(name) {
   document
@@ -170,11 +171,32 @@ function updateVideoCell(cell, ch, idx) {
   updateChannelLastPlate(ch.id, state.lastPlatesByChannelId[ch.id]);
 }
 
+function computeVideoGridRowHeight(grid, rows, cols) {
+  if (!grid || rows <= 0 || cols <= 0) return null;
+  const style = window.getComputedStyle(grid);
+  const gap = Number.parseFloat(style.rowGap || style.gap || "0") || 0;
+  const width = grid.clientWidth;
+  const height = grid.clientHeight;
+  if (width <= 0 || height <= 0) return null;
+
+  const availableWidth = width - gap * (cols - 1);
+  const availableHeight = height - gap * (rows - 1);
+  if (availableWidth <= 0 || availableHeight <= 0) return null;
+
+  const byWidth = (availableWidth / cols) * (9 / 16);
+  const byHeight = availableHeight / rows;
+  const rowHeight = Math.floor(Math.min(byWidth, byHeight));
+  return rowHeight > 0 ? rowHeight : null;
+}
+
 function renderVideoGrid() {
   const grid = document.getElementById("videoGrid");
   const [rows, cols] = gridConfig(document.getElementById("gridSelect").value);
-  grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-  grid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+  grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+  const stableRowHeight = computeVideoGridRowHeight(grid, rows, cols);
+  grid.style.gridTemplateRows = stableRowHeight
+    ? `repeat(${rows}, ${stableRowHeight}px)`
+    : `repeat(${rows}, minmax(0, 1fr))`;
   const visible = state.channels.slice(0, rows * cols);
   document.getElementById("channelsCount").textContent =
     `${state.channels.length} канала`;
@@ -195,6 +217,32 @@ function renderVideoGrid() {
     }
     grid.appendChild(cell);
   }
+}
+
+let videoGridLayoutFrame = null;
+let videoGridResizeObserver = null;
+function scheduleVideoGridLayout() {
+  if (videoGridLayoutFrame !== null) return;
+  videoGridLayoutFrame = requestAnimationFrame(() => {
+    videoGridLayoutFrame = null;
+    const obsTab = document.getElementById("tab-obs");
+    if (!obsTab || !obsTab.classList.contains("active")) return;
+    renderVideoGrid();
+  });
+}
+
+function setupVideoGridLayoutGuards() {
+  window.addEventListener("resize", scheduleVideoGridLayout);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) scheduleVideoGridLayout();
+  });
+  if (typeof ResizeObserver !== "function") return;
+  const obsLeft = document.querySelector("#tab-obs .obs-left");
+  if (!obsLeft) return;
+  videoGridResizeObserver = new ResizeObserver(() => {
+    scheduleVideoGridLayout();
+  });
+  videoGridResizeObserver.observe(obsLeft);
 }
 
 
@@ -1319,6 +1367,7 @@ window.addEventListener("resize", renderEventFeed);
   }
   syncChannelConfigVisibility();
   syncControllerConfigVisibility();
+  setupVideoGridLayoutGuards();
   setupROI();
   switchChannelSettingsTab("channel");
   await refreshChannels();
