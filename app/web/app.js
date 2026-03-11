@@ -658,7 +658,7 @@ function renderChannelsList() {
     const run = (c.metrics || {}).state === "running";
     const row = document.createElement("div");
     row.className = `ch-item ${c.id === selectedChannelId ? "active" : ""}`;
-    row.innerHTML = `<div class='ch-item-dot ${run ? "" : "off"}'></div> CAM-${String(c.id).padStart(2, "0")} · ${c.name}`;
+    row.innerHTML = `<div class='ch-item-dot ${run ? "" : "off"}'></div> ${c.name}`;
     row.onclick = () => selectChannel(c.id);
     box.appendChild(row);
   });
