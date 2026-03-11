@@ -117,7 +117,12 @@ function statusTextForChannel(ch) {
 }
 
 function buildNoSignalHtml(statusText) {
-  return `<div class='cam-no-signal'><svg width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.5'><path d='M23 7l-7 5 7 5V7z'/><rect x='1' y='5' width='15' height='14' rx='2'/></svg><p>${statusText}</p></div>`;
+  return `
+    <div class="cam-no-signal">
+      <img class="cam-no-signal-icon" src="/web/assets/icons/nosignal.svg" alt="" />
+      <p>${statusText}</p>
+    </div>
+  `;
 }
 
 function ensurePreviewStream(img, channelId) {
