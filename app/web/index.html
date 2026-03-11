@@ -22,24 +22,30 @@
             <img class="ui-icon ui-icon-logo" src="/web/assets/icons/logo.svg" alt="ANPR" />
           </button>
         </div>
+      
         <div class="rail-nav">
           <div class="ttab active" data-tab="obs" title="Наблюдение">
             <img class="ttab-icon ui-icon" src="/web/assets/icons/observe.svg" alt="" />
             <span>Наблюдение</span>
+            <div class="dot"></div>
           </div>
+      
           <div class="ttab" data-tab="journal" title="Журнал">
             <img class="ttab-icon ui-icon" src="/web/assets/icons/journal.svg" alt="" />
             <span>Журнал</span>
           </div>
+      
           <div class="ttab" data-tab="lists" title="Списки">
             <img class="ttab-icon ui-icon" src="/web/assets/icons/lists.svg" alt="" />
             <span>Списки</span>
           </div>
+      
           <div class="ttab" data-tab="settings" title="Настройки">
             <img class="ttab-icon ui-icon" src="/web/assets/icons/settings.svg" alt="" />
             <span>Настройки</span>
           </div>
         </div>
+      
         <div class="rail-bottom">
           <div class="sys-stat"><span>CPU</span> <b id="cpuStat">12%</b></div>
           <div class="sys-stat"><span>RAM</span> <b id="ramStat">38%</b></div>
@@ -101,6 +107,7 @@
                 <button class="btn btn-ghost" id="btnExport">
                   <img class="btn-icon ui-icon-sm" src="/web/assets/icons/export.svg" alt="" />
                   <span>Экспорт</span>
+                </button>
               </div>
             </div>
             <div class="data-table-wrap">
@@ -141,7 +148,11 @@
               id="addEntryBtn"
             >
               + Добавить</button>
-            <button class="btn btn-ghost" id="exportListBtn">
+            <button
+              class="btn btn-ghost"
+              style="font-size: 11px; padding: 5px 12px"
+              id="exportListBtn"
+            >
               <img class="btn-icon ui-icon-sm" src="/web/assets/icons/export.svg" alt="" />
               <span>Экспорт</span>
             </button>
@@ -165,22 +176,28 @@
       <div class="tab-pane" id="tab-settings">
         <div class="settings-nav">
           <div class="snav-label">Основное</div>
+        
           <div class="snav-item active" data-sp="general">
             <img class="ui-icon ui-icon-sm" src="/web/assets/icons/settings.svg" alt="" />
             Общие
           </div>
+        
           <div class="snav-item" data-sp="channels">
-              <img class="ui-icon ui-icon-sm" src="/web/assets/icons/channels.svg" alt="" />
+            <img class="ui-icon ui-icon-sm" src="/web/assets/icons/channels.svg" alt="" />
             Каналы
           </div>
+        
           <div class="snav-item" data-sp="controllers">
-            <img class="ui-icon ui-icon-sm" src="/web/assets/icons/controllers.svg" alt="" /> 
+            <img class="ui-icon ui-icon-sm" src="/web/assets/icons/controllers.svg" alt="" />
             Контроллеры
           </div>
+        
           <div class="snav-label">Разработка</div>
+        
           <div class="snav-item" data-sp="debug">
             <img class="ui-icon ui-icon-sm" src="/web/assets/icons/debug.svg" alt="" />
-            Debug</div>
+            Debug
+          </div>
         </div>
         <div class="settings-content">
           <div class="settings-pane active" id="sp-general">
@@ -867,18 +884,17 @@
         </div>
         <div class="event-modal-body">
           <div>
-            <div
-              style="font-size: 12px; color: var(--text2); margin-bottom: 6px"
-            >
-              Кадр распознавания
+            <div class="event-section-title">
+              <img class="ui-icon ui-icon-sm" src="/web/assets/icons/event.svg" alt="" />
+              <span>Кадр распознавания</span>
             </div>
             <div class="event-modal-img">
               <img id="eventFrameImg" alt="frame" />
             </div>
-            <div
-              style="font-size: 12px; color: var(--text2); margin: 10px 0 6px"
-            >
-              Кадр номера
+            
+            <div class="event-section-title">
+              <img class="ui-icon ui-icon-sm" src="/web/assets/icons/plate.svg" alt="" />
+              <span>Кадр номера</span>
             </div>
             <div class="event-modal-img" style="min-height: 150px">
               <img id="eventPlateImg" alt="plate" />
