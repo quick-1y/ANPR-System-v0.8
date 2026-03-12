@@ -300,13 +300,15 @@ function computeVideoGridRowHeight(grid, rows, cols) {
 function renderVideoGrid() {
   const grid = document.getElementById("videoGrid");
   if (!grid) return;
-  const [rows, cols] = gridConfig(document.getElementById("gridSelect").value);
+  const [presetRows, cols] = gridConfig(document.getElementById("gridSelect").value);
+  const visible = state.channels.slice(0, presetRows * cols);
+  const effectiveRows = visible.length > 0 ? Math.ceil(visible.length / cols) : 1;
+
   grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
-  const stableRowHeight = computeVideoGridRowHeight(grid, rows, cols);
+  const stableRowHeight = computeVideoGridRowHeight(grid, effectiveRows, cols);
   grid.style.gridTemplateRows = stableRowHeight
-    ? `repeat(${rows}, ${stableRowHeight}px)`
-    : `repeat(${rows}, minmax(0, 1fr))`;
-  const visible = state.channels.slice(0, rows * cols);
+    ? `repeat(${effectiveRows}, ${stableRowHeight}px)`
+    : `repeat(${effectiveRows}, minmax(0, 1fr))`;
   document.getElementById("channelsCount").textContent =
     `${state.channels.length} канала`;
 
