@@ -446,7 +446,7 @@ class ChannelProcessor:
                     results = pipeline.process_frame(frame, detections)
                     ocr_ms = (time.monotonic() - ocr_started) * 1000.0
                     postprocess_started = time.monotonic()
-                    self._debug_registry.update_from_pipeline_results(channel_id, results)
+                    self._debug_registry.update_from_pipeline_results(channel_id, results, frame_shape=frame.shape)
                     metrics.processed_frames += 1
                     for detection in results:
                         plate = detection.get("text")

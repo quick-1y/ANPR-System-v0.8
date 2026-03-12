@@ -11,6 +11,7 @@ let debugLogSource = null;
 let debugLogReconnectTimer = null;
 let lastDebugLogId = 0;
 let debugSettingsCache = null;
+let overlayRefreshTimer = null;
 function api(path) {
   return `${document.getElementById("apiBase").value.trim()}${path}`;
 }
@@ -264,6 +265,37 @@ function getPreviewDisplayRect(cell, overlayData) {
   };
 }
 
+
+function refreshVideoCellOverlayState(cell, ch) {
+  if (!cell || !ch) return;
+  const statusText = statusTextForChannel(ch);
+  cell.dataset.statusText = statusText;
+  const hasPreviewSignal = getCellPreviewSignal(cell, ch);
+  const statusDot = cell.querySelector(".cam-status");
+  if (statusDot) {
+    statusDot.classList.toggle("live", hasPreviewSignal);
+    statusDot.classList.toggle("off", !hasPreviewSignal);
+  }
+  setNoSignalVisibility(cell, !hasPreviewSignal, statusText);
+  renderDebugOverlay(cell, ch);
+}
+
+async function refreshOverlayStates() {
+  try {
+    const payload = await jfetch(api("/api/debug/channels"));
+    const channels = Array.isArray(payload.channels) ? payload.channels : [];
+    const byId = new Map(channels.map((row) => [Number(row.channel_id), row]));
+    state.channels.forEach((ch) => {
+      const row = byId.get(Number(ch.id));
+      if (!row) return;
+      if (row.metrics) ch.metrics = row.metrics;
+      if (row.debug_state) ch.debug_state = row.debug_state;
+      const cell = document.querySelector(`.video-cell[data-channel-id='${ch.id}']`);
+      if (cell) refreshVideoCellOverlayState(cell, ch);
+    });
+  } catch (_e) {}
+}
+
 function renderDebugOverlay(cell, ch) {
   if (!cell || !ch) return;
   const state = ch.debug_state || {};
@@ -389,7 +421,7 @@ function createVideoCell(ch, idx) {
     statusDot.classList.toggle("off", !hasPreviewSignal);
   }
   ensurePreviewStream(preview, ch.id);
-  renderDebugOverlay(cell, ch);
+  refreshVideoCellOverlayState(cell, ch);
   updateChannelLastPlate(ch.id, state.lastPlatesByChannelId[ch.id]);
   return cell;
 }
@@ -410,7 +442,7 @@ function updateVideoCell(cell, ch, idx) {
   const preview = cell.querySelector(".cam-preview");
   bindPreviewLifecycle(cell, preview);
   ensurePreviewStream(preview, ch.id);
-  renderDebugOverlay(cell, ch);
+  refreshVideoCellOverlayState(cell, ch);
   updateChannelLastPlate(ch.id, state.lastPlatesByChannelId[ch.id]);
 }
 
@@ -1686,6 +1718,10 @@ window.addEventListener("beforeunload", () => {
     } catch (_e) {}
     debugLogSource = null;
   }
+  if (overlayRefreshTimer) {
+    clearInterval(overlayRefreshTimer);
+    overlayRefreshTimer = null;
+  }
 });
 window.addEventListener("pagehide", () => {
   if (eventSource) {
@@ -1699,6 +1735,10 @@ window.addEventListener("pagehide", () => {
       debugLogSource.close();
     } catch (_e) {}
     debugLogSource = null;
+  }
+  if (overlayRefreshTimer) {
+    clearInterval(overlayRefreshTimer);
+    overlayRefreshTimer = null;
   }
 });
 window.addEventListener("resize", renderEventFeed);
@@ -1720,10 +1760,12 @@ window.addEventListener("resize", renderEventFeed);
   await loadJournal();
   await loadLists();
   await loadGlobalSettings();
+  await refreshOverlayStates();
   await loadDebugLogHistory();
   setupDebugLogStream();
   await loadControllers();
   setupStream();
   addDebug("[INFO] UI initialized");
   setInterval(refreshChannels, 8000);
+  overlayRefreshTimer = setInterval(refreshOverlayStates, 700);
 })();
