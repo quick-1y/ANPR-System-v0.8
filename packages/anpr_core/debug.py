@@ -150,10 +150,12 @@ class DebugOverlayRenderer:
             f"OCR: {state.stage_timings.ocr_ms:.1f}ms",
             f"Post: {state.stage_timings.postprocess_ms:.1f}ms",
         ]
-        y = 18
+        row_step = 16
+        x = 10
+        y = max(20, frame.shape[0] - 10 - row_step * (len(rows) - 1))
         for row in rows:
-            cv2.putText(frame, row, (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (220, 236, 255), 1, cv2.LINE_AA)
-            y += 16
+            cv2.putText(frame, row, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (220, 236, 255), 1, cv2.LINE_AA)
+            y += row_step
 
 
 class DebugRegistry:
