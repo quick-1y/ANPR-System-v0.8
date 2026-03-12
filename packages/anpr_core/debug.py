@@ -150,16 +150,31 @@ class DebugOverlayRenderer:
             f"OCR: {state.stage_timings.ocr_ms:.1f}ms",
             f"Post: {state.stage_timings.postprocess_ms:.1f}ms",
         ]
-        row_step = 19
+        height = int(frame.shape[0]) if len(frame.shape) >= 2 else 0
+        if height < 120:
+            font_scale = 0.44
+            thickness = 1
+            row_step = 14
+        elif height < 220:
+            font_scale = 0.50
+            thickness = 1
+            row_step = 16
+        else:
+            font_scale = 0.56
+            thickness = 2
+            row_step = 19
+
         x = 12
-        y = max(24, frame.shape[0] - 14 - row_step * (len(rows) - 1))
-        max_width = max(cv2.getTextSize(row, cv2.FONT_HERSHEY_SIMPLEX, 0.56, 2)[0][0] for row in rows) + 14
+        max_width = max(cv2.getTextSize(row, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)[0][0] for row in rows) + 14
         box_height = row_step * len(rows) + 8
-        top = max(4, y - 16)
-        bottom = min(frame.shape[0] - 2, top + box_height)
+        top = max(4, height - 10 - box_height)
+        bottom = min(height - 2, top + box_height)
+        y = top + max(12, int(row_step * 0.8))
         cv2.rectangle(frame, (x - 6, top), (x - 6 + max_width, bottom), (8, 10, 14), -1)
         for row in rows:
-            cv2.putText(frame, row, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.56, (235, 244, 255), 2, cv2.LINE_AA)
+            if y > bottom - 2:
+                break
+            cv2.putText(frame, row, (x, y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (235, 244, 255), thickness, cv2.LINE_AA)
             y += row_step
 
 

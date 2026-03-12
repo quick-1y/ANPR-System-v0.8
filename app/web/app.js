@@ -1277,6 +1277,7 @@ function applyDebugPanelVisibility() {
   if (!panel) return;
   const enabled = Boolean((debugSettingsCache || {}).log_panel_enabled);
   panel.style.display = enabled ? "flex" : "none";
+  scheduleVideoGridLayout();
   if (!enabled) return;
   if (!panel.dataset.collapsed) panel.dataset.collapsed = "0";
   if (btn) {
@@ -1431,6 +1432,7 @@ if (toggleDebugPanelBtn) {
     const collapsed = panel.dataset.collapsed === "1";
     panel.dataset.collapsed = collapsed ? "0" : "1";
     toggleDebugPanelBtn.textContent = collapsed ? "Свернуть" : "Развернуть";
+    scheduleVideoGridLayout();
   };
 }
 
