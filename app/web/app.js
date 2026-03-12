@@ -1273,9 +1273,15 @@ function addDebug(msg, type = "info") {
 
 function applyDebugPanelVisibility() {
   const panel = document.getElementById("obsDebugPanel");
+  const btn = document.getElementById("toggleDebugPanelBtn");
   if (!panel) return;
   const enabled = Boolean((debugSettingsCache || {}).log_panel_enabled);
   panel.style.display = enabled ? "flex" : "none";
+  if (!enabled) return;
+  if (!panel.dataset.collapsed) panel.dataset.collapsed = "0";
+  if (btn) {
+    btn.textContent = panel.dataset.collapsed === "1" ? "Развернуть" : "Свернуть";
+  }
 }
 
 function scheduleDebugLogReconnect(delayMs = 2000) {
@@ -1421,14 +1427,12 @@ const toggleDebugPanelBtn = document.getElementById("toggleDebugPanelBtn");
 if (toggleDebugPanelBtn) {
   toggleDebugPanelBtn.onclick = () => {
     const panel = document.getElementById("obsDebugPanel");
-    const log = document.getElementById("debugLog");
-    if (!panel || !log) return;
+    if (!panel) return;
     const collapsed = panel.dataset.collapsed === "1";
     panel.dataset.collapsed = collapsed ? "0" : "1";
-    log.style.display = collapsed ? "block" : "none";
     toggleDebugPanelBtn.textContent = collapsed ? "Свернуть" : "Развернуть";
   };
-};
+}
 
 document
   .querySelectorAll(".ttab")

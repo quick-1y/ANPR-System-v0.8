@@ -150,11 +150,16 @@ class DebugOverlayRenderer:
             f"OCR: {state.stage_timings.ocr_ms:.1f}ms",
             f"Post: {state.stage_timings.postprocess_ms:.1f}ms",
         ]
-        row_step = 16
-        x = 10
-        y = max(20, frame.shape[0] - 10 - row_step * (len(rows) - 1))
+        row_step = 19
+        x = 12
+        y = max(24, frame.shape[0] - 14 - row_step * (len(rows) - 1))
+        max_width = max(cv2.getTextSize(row, cv2.FONT_HERSHEY_SIMPLEX, 0.56, 2)[0][0] for row in rows) + 14
+        box_height = row_step * len(rows) + 8
+        top = max(4, y - 16)
+        bottom = min(frame.shape[0] - 2, top + box_height)
+        cv2.rectangle(frame, (x - 6, top), (x - 6 + max_width, bottom), (8, 10, 14), -1)
         for row in rows:
-            cv2.putText(frame, row, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (220, 236, 255), 1, cv2.LINE_AA)
+            cv2.putText(frame, row, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.56, (235, 244, 255), 2, cv2.LINE_AA)
             y += row_step
 
 
