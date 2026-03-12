@@ -45,6 +45,7 @@ class ChannelDebugState:
     stage_timings: ChannelStageTimings = field(default_factory=ChannelStageTimings)
     last_object_update_mono: float = 0.0
     last_ocr_update_mono: float = 0.0
+    _track_points: Deque[tuple[int, int]] = field(default_factory=lambda: deque(maxlen=24))
 
     def touch(self) -> None:
         self.updated_at = datetime.now(timezone.utc).isoformat()
@@ -114,9 +115,10 @@ class DebugRegistry:
                 if x2 <= x1 or y2 <= y1:
                     continue
                 area = (x2 - x1) * (y2 - y1)
+                center = (int((x1 + x2) / 2), int((y1 + y2) / 2))
                 if area > best_area:
                     best_area = area
-                    best_detection = {"bbox": (x1, y1, x2, y2), "direction": det.get("direction")}
+                    best_detection = {"bbox": (x1, y1, x2, y2), "direction": det.get("direction"), "center": center}
 
             if best_detection is None:
                 self._cleanup_stale_locked(state, now)
@@ -131,8 +133,14 @@ class DebugRegistry:
                 max(0.0, min(1.0, y2 / frame_height)),
             )
             state.last_object_update_mono = now
+            center = best_detection.get("center")
+            if center:
+                state._track_points.append(center)
             explicit_direction = str(best_detection.get("direction") or "").strip().upper()
-            state.last_direction = explicit_direction or None
+            if explicit_direction and explicit_direction != "UNKNOWN":
+                state.last_direction = explicit_direction
+            else:
+                state.last_direction = self._estimate_direction(state._track_points)
             state.touch()
             self._cleanup_stale_locked(state, now)
 
@@ -168,8 +176,24 @@ class DebugRegistry:
             state.frame_size = None
             state.last_bbox_norm = None
             state.last_direction = None
+            state._track_points.clear()
         if state.last_ocr_update_mono and (now - state.last_ocr_update_mono) > ttl:
             state.last_ocr_text = None
+
+
+    @staticmethod
+    def _estimate_direction(track_points: Deque[tuple[int, int]]) -> Optional[str]:
+        if len(track_points) < 3:
+            return None
+        start_x, start_y = track_points[0]
+        end_x, end_y = track_points[-1]
+        dx = end_x - start_x
+        dy = end_y - start_y
+        if abs(dx) < 8 and abs(dy) < 8:
+            return None
+        if abs(dx) >= abs(dy):
+            return "IN" if dx > 0 else "OUT"
+        return "IN" if dy < 0 else "OUT"
 
     @staticmethod
     def _state_to_dict(state: ChannelDebugState) -> Dict[str, Any]:
