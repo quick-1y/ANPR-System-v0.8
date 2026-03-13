@@ -267,6 +267,44 @@ class ChannelProcessor:
             return None
         return crop
 
+    def _apply_roi_mask(self, frame: np.ndarray, channel: dict) -> np.ndarray:
+        if not bool(channel.get("roi_enabled", False)):
+            return frame
+
+        region = channel.get("region") or {}
+        points = region.get("points") or []
+        if len(points) < 3:
+            return frame
+
+        height, width = frame.shape[:2]
+        unit = str(region.get("unit", "px")).strip().lower()
+
+        polygon_points: list[list[int]] = []
+        for point in points:
+            if not isinstance(point, dict):
+                continue
+            x = point.get("x")
+            y = point.get("y")
+            if x is None or y is None:
+                continue
+            try:
+                x_value = float(x)
+                y_value = float(y)
+            except (TypeError, ValueError):
+                continue
+            if unit == "percent":
+                x_value *= width
+                y_value *= height
+            polygon_points.append([int(round(x_value)), int(round(y_value))])
+
+        if len(polygon_points) < 3:
+            return frame
+
+        mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+        contour = np.array([polygon_points], dtype=np.int32)
+        cv2.fillPoly(mask, contour, 255)
+        return cv2.bitwise_and(frame, frame, mask=mask)
+
     def _run_channel(self, channel_id: int) -> None:
         with self._lock:
             ctx = self._contexts[channel_id]
@@ -417,6 +455,8 @@ class ChannelProcessor:
                     metrics.empty_frames += 1
                     self._debug_registry.cleanup_stale(channel_id)
                     continue
+
+                frame = self._apply_roi_mask(frame, channel)
 
                 now_monotonic = read_finished_at
                 last_frame_at = now_monotonic
