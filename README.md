@@ -270,29 +270,45 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["Frame"] --> B["YOLODetector.track(frame)"]
-    B --> C{"Размер номера подходит?"}
-    C -->|Нет| Z["Пропуск detection"]
-    C -->|Да| D["TrackDirectionEstimator.update(...)"]
-    D --> E["Вырезание bbox из кадра"]
-    E --> F["PlatePreprocessor.preprocess(...)"]
-    F --> G["CRNNRecognizer.recognize_batch(...)"]
+    A["Frame (full-size)"] --> B{"ROI enabled?"}
+    B -->|Нет| C["detector_frame = frame"]
+    B -->|Да| D["detector_frame = ROI masked frame<br/>(размер кадра и координаты bbox сохраняются)"]
 
-    G --> H{"confidence >= ocr_min_confidence?"}
-    H -->|Нет| U["Пометить как unreadable"]
-    H -->|Да| I{"Есть track_id?"}
+    C --> E{"detection_mode == motion?"}
+    D --> E
+    E -->|Да| F["MotionDetector.update(detector_frame)"]
+    E -->|Нет| H["Пропустить motion gate"]
+    F --> G{"Движение активно?"}
+    G -->|Нет| Z["Пропуск кадра"]
+    G -->|Да| H
 
-    I -->|Да| J["TrackAggregator<br/>best shots + quorum + weighted majority"]
-    I -->|Нет| K["Использовать текущий OCR текст"]
+    H --> I["YOLODetector.track(detector_frame)"]
+    I --> J{"ROI filter detections<br/>(центр bbox внутри polygon)?"}
+    J -->|Нет detections| Z
+    J -->|Есть detections| K["ANPRPipeline.process_frame(full frame, detections)"]
 
-    J --> L["PlatePostProcessor.process(...)"]
-    K --> L
+    K --> L{"Размер номера подходит?"}
+    L -->|Нет| Z
+    L -->|Да| M["TrackDirectionEstimator.update(...)"]
+    M --> N["Вырезание bbox из full frame"]
+    N --> O["PlatePreprocessor.preprocess(...)"]
+    O --> P["CRNNRecognizer.recognize_batch(...)"]
 
-    L --> M{"Номер валиден?"}
-    M -->|Нет| Z
-    M -->|Да| N{"Cooldown прошёл?"}
-    N -->|Нет| Z
-    N -->|Да| O["Сформировать готовое событие"]
+    P --> Q{"confidence >= ocr_min_confidence?"}
+    Q -->|Нет| U["Пометить как unreadable"]
+    Q -->|Да| R{"Есть track_id?"}
+
+    R -->|Да| S["TrackAggregator<br/>best shots + quorum + weighted majority"]
+    R -->|Нет| T["Использовать текущий OCR текст"]
+
+    S --> V["PlatePostProcessor.process(...)"]
+    T --> V
+
+    V --> W{"Номер валиден?"}
+    W -->|Нет| Z
+    W -->|Да| X{"Cooldown прошёл?"}
+    X -->|Нет| Z
+    X -->|Да| Y["Сформировать готовое событие"]
 ```
 
 ---
@@ -446,7 +462,7 @@ UI параллельно:
 - `anpr/preprocessing/plate_preprocessor.py` — коррекция перспективы / наклона;
 - `anpr/recognition/crnn_recognizer.py` — OCR CRNN;
 - `anpr/postprocessing/validator.py` — валидация по конфигам стран;
-- `anpr/detection/motion_detector.py` — модуль motion detection, пока не включён в основной runtime path.
+- `anpr/detection/motion_detector.py` — модуль motion detection; используется в runtime при `detection_mode=motion`.
 
 ### Controllers (интеграция с оборудованием)
 
